@@ -66,6 +66,10 @@ namespace BotTest.Game.AI.Knowledge
             [DestinyHeroPlasma] = 2500, // negates our monsters' effects and steals one as equip
         };
 
+        // Book of Moon prefers these over the attacker: face-down, Plasma stops negating our monsters and loses the
+        // monster it took as an equip.
+        public static readonly int[] BookOfMoonPriority = { DestinyHeroPlasma };
+
         // Our cards whose effect destroys: Stardust Dragon negates them.
         public static readonly int[] DestructionCards =
         {

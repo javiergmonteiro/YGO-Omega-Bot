@@ -19,6 +19,10 @@ Cada entrada tiene:
   - No se puede elegir el orden de ataque: ni "primero el más débil" ni "Shura primero". Lo único que se elige es el objetivo del primero, o no atacar.
   - Antes de leer `attackers[0]`, chequeá `attackers.Length > 0`. Puede llegar un BattleCmd con `Attackable=0` (por ejemplo, con Book of Moon en la mano), y eso ya crasheó el bot.
 
+### #0b. Activaciones desde BattleCmd: sin verificar (precaución)
+- **Qué pasa:** no sabemos si el índice de `ActivableCards` en un BattleCmd se respeta o tiene el mismo bug que el ataque.
+- **Consecuencia:** el bot solo activa desde BattleCmd (por ejemplo, Icarus en su battle step) si la carta es `ActivableCards[0]`. Si se confirma que el índice anda, se puede relajar.
+
 ### #1. El replay de batalla nunca llega al bot custom
 - **Qué pasa:** cuando cambia el campo durante un ataque (Scapegoat, etc.), el juego no le pregunta al bot si quiere repetir el ataque. Se confirmó con la traza completa de estados: no llega ningún YesNo ni ningún estado sin manejar. El siguiente BattleCmd ya muestra a ese atacante como no disponible.
 - **Consecuencia:** ese ataque se pierde y el bot no lo puede evitar.

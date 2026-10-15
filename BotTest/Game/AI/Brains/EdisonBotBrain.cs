@@ -372,6 +372,19 @@ namespace BotTest.Game.AI.Brains
                 TryActivate(state, BrainControl, board.StardustBlocking, out response))
                 return Result(response);
 
+            // Book of Moon on a face-up Stardust in our Main Phase 1 when it's what stops our destruction this turn
+            // (Heavy Storm in hand, Icarus set for the battle step).
+            var stardustUp = board.EnemyMonsters.FirstOrDefault(card => card.IsCode(StardustDragon) && card.IsFaceup() && !card.IsDisabled());
+            bool destructionReady = board.Hand.Any(card => card.IsCode(HeavyStorm)) ||
+                board.OwnSpells.Any(card => !card.IsFaceup() && card.IsCode(IcarusAttack));
+            if (IsBotTurn && board.IsMain1 && stardustUp.ID != 0 && destructionReady &&
+                TryActivate(state, BookOfMoon, false, out response))
+            {
+                Log("Book of Moon on Stardust: unlocks our destruction this turn");
+                _preferredTarget = stardustUp;
+                return Result(response);
+            }
+
             // Removal spells (skipped automatically while Stardust can negate them).
             // Heavy Storm hits our backrow too. Use it when it takes more of theirs than ours, or an even trade when
             // we're ahead in total cards (hand + field) or it clears the way for lethal.
@@ -749,6 +762,26 @@ namespace BotTest.Game.AI.Brains
                 attackers = new[] { attackers[0] };
             }
 
+            // Icarus in our own battle step: when their monsters (a Gorz and its token...) stop our next attacker,
+            // clear them now so the attacks go on, instead of waiting for their turn. Only through the first
+            // activable card (the API may use the first one whatever index we send, like attacks).
+            var activables = context.StateData.ActivableCards ?? Array.Empty<DynamicCard>();
+            if (activables.Length > 0 && activables[0].IsCode(IcarusAttack) && attackers.Length > 0 && !attackers[0].Attacked && !_targetingBlocked)
+            {
+                var blockers = await GetEnemyMonsterCardsAsync();
+                var ownMonsters = await GetBotMonsterCardsAsync();
+                var spellsNow = await GetEnemySpellCardsAsync();
+                bool firstBlocked = blockers.Count > 0 && !blockers.Any(target => GetAttackScore(attackers[0], target) > 0);
+                if (firstBlocked && ownMonsters.Count >= 2 &&
+                    !IsStardustBlocking(blockers, await GetOwnSpellCardsAsync(), await GetBotHandCardsAsync()) &&
+                    await ShouldUseIcarus(blockers, spellsNow))
+                {
+                    Log("Icarus in our battle step: clearing their blockers so the attacks go on");
+                    Chain.MarkOwnActivation(false, CurrentHeader, IcarusAttack);
+                    return activables[0].BattleActivateFromIndex();
+                }
+            }
+
             // We saw Mirror Force in their hand and they have set cards: one attack per battle, not the whole board.
             bool mirrorKnown = StillInRevealedHand(MirrorForce) &&
                 CardCounter.OpponentCopiesLeft(MirrorForce, CurrentField.EnemySide.Grave, CurrentField.EnemySide.Banish, Array.Empty<int>()) > 0;
@@ -785,17 +818,24 @@ namespace BotTest.Game.AI.Brains
             bool gorzPossible = (enemySideNow.Hand ?? Array.Empty<int>()).Length > 0 &&
                 (_revealedEnemyHand.Contains(GorzTheEmissaryOfDarkness) ||
                  CardCounter.OpponentCopiesLeft(GorzTheEmissaryOfDarkness, enemySideNow.Grave, enemySideNow.Banish, Array.Empty<int>()) > 0);
-            if (enemyEmpty && gorzPossible)
+            // Only the first listed monster can attack, so we can't pick the weakest: if the first isn't the weakest
+            // and nothing set answers Gorz and its token (Icarus, Mirror Force, Prison, Book of Moon), stay back
+            // rather than hand them a big token. An attack that wins the duel goes anyway.
+            if (enemyEmpty && gorzPossible && attackers.Length > 0 && !attackers[0].Attacked && attackers[0].CanDirectAttack)
             {
-                int weakest = -1;
-                for (int i = 0; i < attackers.Length; i++)
-                    if (!attackers[i].Attacked && attackers[i].CanDirectAttack && (weakest < 0 || attackers[i].Attack < attackers[weakest].Attack))
-                        weakest = i;
-                if (weakest >= 0)
+                var ready = allAttackers.Where(card => !card.Attacked && card.CanDirectAttack).ToList();
+                bool firstIsWeakest = ready.All(card => card.Attack >= attackers[0].Attack);
+                bool lethal = ready.Sum(card => card.Attack) >= enemySideNow.LifePoints;
+                bool answerSet = (await GetOwnSpellCardsAsync()).Any(card => !card.IsFaceup() &&
+                    card.IsCode(IcarusAttack, MirrorForce, DimensionalPrison, BookOfMoon));
+                if (!firstIsWeakest && !answerSet && !lethal)
                 {
-                    Log($"{attackers[weakest].ID} attacks first (weakest) in case of Gorz{(_revealedEnemyHand.Contains(GorzTheEmissaryOfDarkness) ? " (seen in hand)" : "")}");
-                    return AttackWith(attackers[weakest]);
+                    Log($"{attackers[0].ID} stays back: Gorz possible, it isn't our weakest attacker and nothing set answers it");
+                    return context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
                 }
+
+                Log($"{attackers[0].ID} attacks directly, Gorz possible ({(firstIsWeakest ? "weakest attacker" : answerSet ? "answer set" : "lethal")})");
+                return AttackWith(attackers[0]);
             }
 
             // Monsters with an effect when they destroy a monster by battle (Shura) attack first, into a non-token
@@ -1089,6 +1129,21 @@ namespace BotTest.Game.AI.Brains
             if (card.IsCode(TrapDustshoot))
                 return !IsBotTurn && !Chain.AnsweredCurrentChain(CurrentHeader);
 
+            // Book of Moon on a face-up Stardust in their Draw/Standby Phase when our set destruction cards (Mirror Force,
+            // Bottomless, Solemn...) would otherwise be negated: face-down, it can't stop them this turn.
+            if (card.IsCode(BookOfMoon) && !IsBotTurn && (DuelPhase)CurrentHeader.CurrentPhase is DuelPhase.Draw or DuelPhase.Standby &&
+                !Chain.AnsweredCurrentChain(CurrentHeader))
+            {
+                var stardust = enemyMonsters.FirstOrDefault(monster => monster.IsCode(StardustDragon) && monster.IsFaceup() && !monster.IsDisabled());
+                bool lockedAnswers = ownSpells.Any(spell => !spell.IsFaceup() && spell.IsCode(DestructionCards));
+                if (stardust.ID != 0 && lockedAnswers)
+                {
+                    Log("Book of Moon on Stardust: our set destruction cards work this turn");
+                    _preferredTarget = stardust;
+                    return true;
+                }
+            }
+
             // Other spells/traps only on the opponent's turn so we don't hit our own plays.
             if (IsBotTurn)
                 return false;
@@ -1133,7 +1188,7 @@ namespace BotTest.Game.AI.Brains
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),
                 MysticalSpaceTyphoon => ShouldChainMst(enemySpells),
-                BookOfMoon => UseBookOfMoonOnAttacker(attacker),
+                BookOfMoon => UseBookOfMoonOnAttacker(attacker, enemyMonsters),
                 _ => true
             };
         }
@@ -1182,10 +1237,21 @@ namespace BotTest.Game.AI.Brains
 
         // Book of Moon on their turn: wait for an attack declaration. Flipped then, the monster can't attack
         // and can't be flip summoned back until their next turn. Target that attacker.
-        private bool UseBookOfMoonOnAttacker(DynamicCard? attacker)
+        private bool UseBookOfMoonOnAttacker(DynamicCard? attacker, List<DynamicCard> enemyMonsters)
         {
             if (!attacker.HasValue || !attacker.Value.IsFaceup())
                 return false;
+
+            // Plasma on their field is the better target whatever attacks (unless the attack itself kills us):
+            // face-down it stops negating our monsters and loses the monster it took.
+            bool lethalHit = !CurrentField.OwnSide.HasBattlingMonster && attacker.Value.Attack >= CurrentField.OwnSide.LifePoints;
+            var priority = enemyMonsters.FirstOrDefault(card => card.IsFaceup() && !card.IsDisabled() && card.IsCode(BookOfMoonPriority));
+            if (!lethalHit && priority.ID != 0)
+            {
+                Log($"Book of Moon on {priority.ID} instead of the attacker {attacker.Value.ID}");
+                _preferredTarget = priority;
+                return true;
+            }
 
             // Only when the attack costs something worth a card: lethal or a big hit going direct, or a valuable
             // face-up monster of ours about to die. Not to save a set monster (Vayu is happy in the GY) or a small hit.
@@ -1252,8 +1318,14 @@ namespace BotTest.Game.AI.Brains
         }
 
         // Without knowing what's being summoned, only pay half LP when the board is already threatening.
-        private static bool IsWorthSolemn(List<DynamicCard> enemyMonsters) =>
-            enemyMonsters.Any(monster => monster.IsCode(StardustDragon) || monster.Attack >= 2400);
+        // On a summon, only the monster being summoned counts (a big monster already on their field doesn't make
+        // a Lonefire worth half our LP).
+        private bool IsWorthSolemn(List<DynamicCard> enemyMonsters)
+        {
+            bool isSummon = CurrentHeader.LastChainPlayer != ChainTracker.Opponent;
+            var judged = isSummon ? NewEnemyMonsters(enemyMonsters) : enemyMonsters;
+            return judged.Any(monster => monster.IsCode(StardustDragon) || monster.Attack >= 2400);
+        }
 
         // Icarus is a 2-for-1, not a reflex. Use it when:
         //  - one of our monsters is about to die in battle anyway (tribute it in response), or
@@ -1318,7 +1390,7 @@ namespace BotTest.Game.AI.Brains
             {
                 var cheapest = selectable
                     .Select((card, index) => new { Card = card, Index = index })
-                    .OrderBy(x => MaterialCost(x.Card))
+                    .OrderBy(x => MaterialCost(x.Card) - (IsBotTurn && x.Card.Attacked ? 3000 : 0))
                     .Take(Math.Max(state.Minimum, 1))
                     .Select(x => (byte)x.Index)
                     .ToList();
