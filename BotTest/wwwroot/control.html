@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bot YGO Omega</title>
+  <style>
+    :root {
+      --bg: #f4f5f7; --card: #ffffff; --text: #1d2330; --muted: #677085; --border: #dde1e8;
+      --verde: #1f9d55; --amarillo: #d69e00; --naranja: #dd6b20; --rojo: #d64545; --gris: #8a93a6;
+      --accent: #3b5bdb; --log-bg: #0f1420; --log-text: #d6deeb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #11151c; --card: #1a2029; --text: #e6e9ef; --muted: #98a2b3; --border: #2a3240; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+    main { max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 14px; }
+    h1 { margin: 0; font-size: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .status { display: flex; align-items: center; gap: 14px; }
+    .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--gris); box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent); }
+    .dot.verde { background: var(--verde); } .dot.amarillo { background: var(--amarillo); }
+    .dot.naranja { background: var(--naranja); } .dot.rojo { background: var(--rojo); } .dot.gris { background: var(--gris); }
+    .status-msg { font-size: 16px; font-weight: 600; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip { border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: var(--muted); font-size: 12px; }
+    .chip b { color: var(--text); font-weight: 600; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    label.title { display: block; font-weight: 600; margin-bottom: 6px; }
+    select, input[type=text] { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+    select { min-width: 260px; }
+    input[type=text] { flex: 1; min-width: 200px; }
+    button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: .5; cursor: default; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .log-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    #log { background: var(--log-bg); color: var(--log-text); border-radius: 8px; height: 420px; overflow: auto; padding: 10px; font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; }
+    #log .t { color: #6b7894; }
+    #log .decision { color: #9ecbff; } #log .panel { color: #c3e88d; } #log .nota { color: #ffcb6b; font-weight: 600; }
+    #log .error { color: #ff6b6b; } #log .motor { color: #7f8aa3; }
+    .toast { color: var(--muted); font-size: 12px; min-height: 16px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Bot YGO Omega</h1>
+
+  <section class="card">
+    <div class="status">
+      <div id="dot" class="dot gris"></div>
+      <div id="statusMsg" class="status-msg">Conectando con el panel...</div>
+    </div>
+    <div class="chips">
+      <span class="chip">Omega: <b id="chipGame">-</b></span>
+      <span class="chip">Bot en la sala: <b id="chipBot">-</b></span>
+      <span class="chip">Mazo cargado: <b id="chipDeck">-</b></span>
+      <span class="chip">Panel: <b id="chipConn">-</b></span>
+      <span class="chip">Turno: <b id="chipTurn">-</b></span>
+      <span class="chip">Banlist: <b id="chipBanlist">-</b></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <label class="title" for="deck">Mazo del bot</label>
+    <div class="row">
+      <select id="deck"></select>
+      <button id="connect" class="primary">Conectar</button>
+      <button id="disconnect">Desconectar</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label><input type="checkbox" id="auto"> Conectar automáticamente cuando aparezca un AI_CUSTOM esperando mazo</label>
+    </div>
+    <div id="toast" class="toast"></div>
+  </section>
+
+  <section class="card">
+    <label class="title" for="note">Nota de feedback</label>
+    <div class="row">
+      <input type="text" id="note" placeholder="Ej: usó Royal Oppression en su propio Vayu">
+      <button id="saveNote">Guardar nota</button>
+    </div>
+    <div class="hint">Se guarda con el turno actual en el log de la sesión, así después cruzo tu comentario con lo que decidió el bot.</div>
+  </section>
+
+  <section class="card">
+    <div class="log-head">
+      <div class="row">
+        <label><input type="radio" name="filter" value="decisiones" checked> Decisiones</label>
+        <label><input type="radio" name="filter" value="todo"> Todo</label>
+      </div>
+      <div class="row">
+        <button id="copy">Copiar últimas 150 líneas</button>
+        <button id="openLogs">Abrir carpeta de logs</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const lines = [];
+let lastId = 0;
+let filter = 'decisiones';
+let connected = false;
+
+function storage(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+  } catch { return null; }
+}
+
+function toast(text) { $('toast').textContent = text; }
+
+async function api(path, body) {
+  const options = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.Message || res.statusText);
+  return data;
+}
+
+function selectedDeck() {
+  const option = $('deck').selectedOptions[0];
+  return option ? { Format: option.dataset.format, DeckId: option.value } : null;
+}
+
+async function loadDecks() {
+  const [decks, status] = await Promise.all([api('/api/control/decks'), api('/api/control/status')]);
+  const groups = {};
+  for (const deck of decks) {
+    (groups[deck.formatName] ||= document.createElement('optgroup')).label = deck.formatName;
+    const option = new Option(deck.name, deck.id);
+    option.dataset.format = deck.formatId;
+    groups[deck.formatName].appendChild(option);
+  }
+  Object.values(groups).forEach(group => $('deck').appendChild(group));
+
+  const saved = storage('deck');
+  const preferred = [...$('deck').options].find(o => o.value === saved) ||
+                    [...$('deck').options].find(o => o.value === 'Blackwings') ||
+                    [...$('deck').options].find(o => o.value === status.selectedDeckId);
+  if (preferred) preferred.selected = true;
+  await api('/api/control/select', selectedDeck()).catch(() => {});
+
+  const savedAuto = storage('auto');
+  const auto = savedAuto === null ? status.autoConnect : savedAuto === 'true';
+  $('auto').checked = auto;
+  await api('/api/control/autoconnect', { Enabled: auto });
+}
+
+async function refreshStatus() {
+  try {
+    const s = await api('/api/control/status');
+    const g = s.game;
+    $('dot').className = 'dot ' + g.color;
+    $('statusMsg').textContent = g.message;
+    $('chipGame').textContent = g.gameOnline ? 'abierto' : 'cerrado';
+    $('chipBot').textContent = g.botInRoom ? (g.botReady ? 'sí, listo' : 'sí') : 'no';
+    $('chipDeck').textContent = g.botDeck || '-';
+    $('chipConn').textContent = g.connected ? 'conectado' : 'desconectado';
+    $('chipTurn').textContent = g.turn > 0 ? g.turn : '-';
+    $('chipBanlist').textContent = s.banlist || '-';
+    connected = g.connected;
+    $('connect').disabled = connected || !g.botInRoom;
+    $('disconnect').disabled = !connected;
+    $('deck').disabled = connected;
+  } catch {
+    $('dot').className = 'dot rojo';
+    $('statusMsg').textContent = 'El panel no responde. ¿Se cerró la ventana de "Iniciar Bot"?';
+  }
+}
+
+function lineVisible(line) {
+  return filter === 'todo' || line.kind !== 'motor';
+}
+
+function renderLine(line) {
+  const div = document.createElement('div');
+  div.className = line.kind;
+  const time = new Date(line.timestamp).toLocaleTimeString('es-AR', { hour12: false });
+  div.innerHTML = `<span class="t">${time}</span> `;
+  div.appendChild(document.createTextNode(line.text));
+  return div;
+}
+
+function rerender() {
+  const box = $('log');
+  box.innerHTML = '';
+  lines.filter(lineVisible).slice(-800).forEach(line => box.appendChild(renderLine(line)));
+  box.scrollTop = box.scrollHeight;
+}
+
+async function refreshLog() {
+  try {
+    const fresh = await api('/api/control/log?since=' + lastId);
+    if (!fresh.length) return;
+    const box = $('log');
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    for (const line of fresh) {
+      lines.push(line);
+      lastId = line.id;
+      if (lineVisible(line)) box.appendChild(renderLine(line));
+    }
+    if (lines.length > 3000) lines.splice(0, lines.length - 3000);
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  } catch { /* panel down: status shows it */ }
+}
+
+$('deck').addEventListener('change', async () => {
+  storage('deck', $('deck').value);
+  try { await api('/api/control/select', selectedDeck()); toast('Mazo seleccionado: ' + $('deck').selectedOptions[0].text); }
+  catch (e) { toast(e.message); }
+});
+
+$('connect').addEventListener('click', async () => {
+  try { await api('/api/control/connect', selectedDeck()); toast('Conectando...'); }
+  catch (e) { toast('No se pudo conectar: ' + e.message); }
+  refreshStatus();
+});
+
+$('disconnect').addEventListener('click', async () => {
+  try { await api('/api/control/disconnect', {}); toast('Desconectado.'); }
+  catch (e) { toast(e.message); }
+  refreshStatus();
+});
+
+$('auto').addEventListener('change', async () => {
+  storage('auto', String($('auto').checked));
+  await api('/api/control/autoconnect', { Enabled: $('auto').checked });
+  toast($('auto').checked ? 'Conexión automática activada.' : 'Conexión automática desactivada.');
+});
+
+async function saveNote() {
+  const text = $('note').value.trim();
+  if (!text) return;
+  try { await api('/api/control/note', { Text: text }); $('note').value = ''; toast('Nota guardada.'); refreshLog(); }
+  catch (e) { toast(e.message); }
+}
+$('saveNote').addEventListener('click', saveNote);
+$('note').addEventListener('keydown', e => { if (e.key === 'Enter') saveNote(); });
+
+document.querySelectorAll('input[name=filter]').forEach(radio =>
+  radio.addEventListener('change', () => { filter = radio.value; rerender(); }));
+
+$('copy').addEventListener('click', async () => {
+  const text = lines.filter(lineVisible).slice(-150)
+    .map(l => `${new Date(l.timestamp).toLocaleTimeString('es-AR', { hour12: false })} ${l.text}`).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('Copiado: ya lo podés pegar en el chat.'); }
+  catch { toast('No se pudo copiar al portapapeles.'); }
+});
+
+$('openLogs').addEventListener('click', async () => {
+  try { const r = await api('/api/control/open-logs', {}); toast('Abriendo ' + r.folder); }
+  catch (e) { toast(e.message); }
+});
+
+// The page can open before the panel finishes starting: keep retrying until the deck list loads.
+(function loadDecksWithRetry() {
+  loadDecks().then(() => toast('')).catch(() => {
+    toast('Esperando a que arranque el panel...');
+    $('deck').innerHTML = '';
+    setTimeout(loadDecksWithRetry, 1500);
+  });
+})();
+refreshStatus();
+refreshLog();
+setInterval(refreshStatus, 1000);
+setInterval(refreshLog, 1000);
+</script>
+</body>
+</html>

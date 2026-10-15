@@ -208,11 +208,77 @@ namespace OmegaBotWrapper
         {
             CurrentStateHeader = await _api.GetBotStateHeader(BotID, ct);
             var state = (BotState)CurrentStateHeader.CurrentStateCode;
+            await TraceUncommonStateAsync(state, ct);
             var payload = await _dispatcher.DispatchAsync(state, ct);
             if (payload == null)
                 return true;
+            TraceResponse(state, payload);
             return await SendResponse(payload, ct);
         }
+
+        // Trace of every decision the game asks for, so no prompt goes by unnoticed (e.g. a battle replay).
+        private static readonly BotState[] CommonStates =
+        {
+            BotState.None, BotState.WaitingForDeck, BotState.SelectIdleCmd, BotState.SelectBattleCmd,
+            BotState.SelectPlace, BotState.SelectChain
+        };
+
+        private string? _lastTrace;
+
+        private async Task TraceUncommonStateAsync(BotState state, CancellationToken ct)
+        {
+            if (state == BotState.SelectBattleCmd)
+            {
+                await TraceEmptyBattleCmdAsync(ct);
+                return;
+            }
+
+            if (CommonStates.Contains(state))
+                return;
+
+            string key = $"{(int)state}:{CurrentStateHeader.CurrentTurn}:{CurrentStateHeader.CurrentPhase}";
+            if (key == _lastTrace)
+                return;
+            _lastTrace = key;
+
+            try
+            {
+                var raw = await _api.GetBotStateAs<Newtonsoft.Json.Linq.JObject>(BotID, ct);
+                string json = raw.ToString(Newtonsoft.Json.Formatting.None);
+                BotLogger.Log(BotID, "Trace", $"State {state}({(int)state}) raw: {(json.Length > 700 ? json[..700] + "..." : json)}");
+            }
+            catch (Exception ex)
+            {
+                BotLogger.Log(BotID, "Trace", $"State {state}({(int)state}) raw unavailable: {ex.Message}");
+            }
+        }
+
+        // A battle command with nobody able to attack: keep the raw data (to see what happened to a replayed attacker).
+        private async Task TraceEmptyBattleCmdAsync(CancellationToken ct)
+        {
+            try
+            {
+                var raw = await _api.GetBotStateAs<Newtonsoft.Json.Linq.JObject>(BotID, ct);
+                var attackable = raw["CurrentStateData"]?["AttackableCards"] as Newtonsoft.Json.Linq.JArray;
+                if (attackable != null && attackable.Count > 0)
+                    return;
+
+                string json = raw.ToString(Newtonsoft.Json.Formatting.None);
+                string key = $"battle:{CurrentStateHeader.CurrentTurn}:{json.GetHashCode()}";
+                if (key == _lastTrace)
+                    return;
+                _lastTrace = key;
+                BotLogger.Log(BotID, "Trace", $"Empty SelectBattleCmd raw: {(json.Length > 900 ? json[..900] + "..." : json)}");
+            }
+            catch (Exception ex)
+            {
+                BotLogger.Log(BotID, "Trace", $"Empty SelectBattleCmd raw unavailable: {ex.Message}");
+            }
+        }
+
+        private void TraceResponse(BotState state, byte[] payload) =>
+            BotLogger.Log(BotID, "Trace", $"Answered {state}({(int)state}) turn {CurrentStateHeader.CurrentTurn} " +
+                $"phase 0x{CurrentStateHeader.CurrentPhase:X} with [{Convert.ToHexString(payload)}]");
         /// <summary>
         /// Queries information about the bot side of the field
         /// </summary>

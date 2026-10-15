@@ -1,4 +1,4 @@
-using BotTest.Utils;
+﻿using BotTest.Utils;
 using OmegaBotWrapper;
 
 namespace BotTest.Web;
@@ -20,9 +20,11 @@ public sealed class BotControlService
     private readonly List<LogEntry> _logs = new();
     private Task? _runningTask;
     private CancellationTokenSource? _cts;
+    private readonly SessionLog _sessionLog;
 
-    public BotControlService()
+    public BotControlService(SessionLog sessionLog)
     {
+        _sessionLog = sessionLog;
         _formatOptions = DeckCatalog.GetFormatOptions();
 
         var defaultFormat = _formatOptions.First();
@@ -105,6 +107,7 @@ public sealed class BotControlService
             _statusDetail = $"Connecting the bot to the deck {selection.DeckName}...";
             _lastUpdated = DateTimeOffset.Now;
             AddLog($"Starting the duel with {selection.DeckName}.", "system");
+            _sessionLog.StartSession(selection.DeckName);
             var token = _cts.Token;
             _runningTask = Task.Run(() => ExecuteDuelAsync(selection, requestRematch: false, token));
         }
@@ -181,7 +184,8 @@ public sealed class BotControlService
                 await Task.Delay(500, ct);
             }
 
-            var bot = DeckCatalog.CreateBot(selection.FormatId, selection.DeckId);
+            var (bot, deckSource) = await DeckCatalog.CreateBotAsync(selection.FormatId, selection.DeckId);
+            AddLog(deckSource, "system");
 
             UpdateStatus("Connecting", $"Trying to connect the bot using {selection.DeckName}...");
             var connected = await bot.Connect(ct: ct);
@@ -245,6 +249,10 @@ public sealed class BotControlService
 
     private void AddLog(string message, string kind = "info")
     {
+        // Engine messages already reach the session log through the console; forward only panel events.
+        if (kind is "system" or "error")
+            _sessionLog.Add(message, kind == "error" ? "error" : "panel");
+
         lock (_sync)
         {
             _logs.Insert(0, new LogEntry(DateTimeOffset.Now, message, kind));
@@ -287,3 +295,7 @@ public sealed record DeckOptionDto(string Id, string Name, string? AssetDeckId =
 public sealed record LogEntry(DateTimeOffset Timestamp, string Message, string Kind);
 
 internal sealed record DeckSelection(string FormatId, string DeckId, string DeckName);
+
+public sealed record AutoConnectRequest(bool Enabled);
+
+public sealed record NoteRequest(string Text);

@@ -1,0 +1,26 @@
+BOT YGO OMEGA (Blackwings, formato Edison)
+==========================================
+
+Requisitos
+- Windows 10/11 de 64 bits.
+- YGO Omega instalado. No hace falta instalar .NET ni nada mas: el bot ya lo trae adentro.
+
+Como usarlo
+1. Descomprimi esta carpeta donde quieras (por ejemplo en Documentos).
+2. Abri YGO Omega.
+3. Doble clic en "Iniciar Bot.cmd". Se abre una ventana negra (dejala abierta) y el panel en el navegador.
+4. En Omega: Local > Host, agrega un bot "AI_CUSTOM" en la sala.
+   Con "Conectar automaticamente" marcado, el bot se conecta solo con el mazo elegido en el panel.
+5. Marca listo y juga.
+
+Mazo
+- El bot usa el mazo de tu lista de Omega que se llame igual que el elegido en el panel (por ejemplo "Blackwings").
+  Si no tenes uno con ese nombre, usa la lista que trae guardada.
+
+Feedback
+- En el panel podes escribir notas ("Nota de feedback"); se guardan con el turno.
+- "Abrir carpeta de logs" abre la carpeta "logs" de esta misma carpeta: ahi queda todo lo que decidio el bot
+  (decisiones.log), el registro de cada partida (duelo-gN.txt) y tus notas (notas.txt).
+
+Si Windows muestra "Windows protegio tu equipo" al abrirlo: "Mas informacion" > "Ejecutar de todas formas"
+(el programa no esta firmado digitalmente).

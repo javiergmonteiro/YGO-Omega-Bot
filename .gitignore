@@ -20,3 +20,8 @@ bld/
 
 # Test project
 OmegaBotWrapper.Tests/
+# Bot session logs (Iniciar Bot.cmd)
+logs/
+
+# Shareable package (dotnet publish output)
+dist/

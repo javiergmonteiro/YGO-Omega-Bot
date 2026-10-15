@@ -18,7 +18,8 @@ namespace BotTest.Decks
         BlueEyes,
         DarkMagician,
         SwordSoul,
-        HandTraps
+        HandTraps,
+        Blackwings
     }
 
     /// <summary>
@@ -73,6 +74,13 @@ namespace BotTest.Decks
                 (
                     DeckName: "HandTraps",
                     DeckHash: "s2Fer3yPAYaVPGbC8XWp+Yww/LdzDisMbzI6A8dyLgFMft9LGWE4v+w9AwxfPFTB+s5tAwsMGy2qZQDhtY+4mGD4gpwRKwh7f0pnguGXZ06wwrDFxmQWGNbklmKG4aDvXXC8wX0THD+MmAvHpuzNTDAcMfkok7B7KgOIvlR8jRWGQX4GAA=="
+                )
+            },
+            {
+                MasterDuelDeck.Blackwings,
+                (
+                    DeckName: "Blackwings",
+                    DeckHash: "M2eMPvCIeT1zAwsMf+1oZIbhI3teM8HwIw8RVhjmXSHHcDI/hhGGZ3SEsoDw+yYxhrAsW9YSd23G/H2GLDB89ds1hvfqgQxeLwtZQThu8QFGEL4XasgCwuVxhswwLHRzAVNnQDfrb5YKpn7j28xBn3awXH9syVKj/pvRqTOT8TuLBcvv6R6s+5SXM7GHyrJs35/E8uZEAYP93KksIDzj5n+mq0zTmGxOTWUEmQMA"
                 )
             }
         };
