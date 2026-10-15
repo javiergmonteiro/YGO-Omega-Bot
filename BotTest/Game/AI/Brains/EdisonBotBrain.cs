@@ -41,9 +41,41 @@ namespace BotTest.Game.AI.Brains
 
         private static string ZoneKey(DynamicCard card) => $"{Key(card)}@{card.CurrentCoordinates.Sequence}";
 
+        // Synchros summoned with Vayu's effect have their effects negated while on the field (card -> turn picked).
+        private readonly Dictionary<int, int> _vayuSummoned = new();
+
+        /// <summary>Negated by the engine, or summoned with Vayu (its effects stay negated).</summary>
+        protected bool IsNegated(DynamicCard card) => card.IsDisabled() || _vayuSummoned.ContainsKey(Key(card));
+
+        // Trap Stun: every trap is negated for the rest of the turn it resolves. Seen face-up on their field, or a new
+        // copy in their GY / banished since the turn started.
+        private int _trapStunTurn = -1;
+        private (int Turn, int Count) _trapStunBaseline = (-1, 0);
+
+        private void UpdateTrapStun(IEnumerable<DynamicCard> enemySpells)
+        {
+            int turn = CurrentHeader.CurrentTurn;
+            var enemy = CurrentField.EnemySide;
+            int used = (enemy.Grave ?? Array.Empty<int>()).Concat(enemy.Banish ?? Array.Empty<int>())
+                .Count(id => CardIdentity.Same(id, TrapStun));
+            if (_trapStunBaseline.Turn != turn)
+                _trapStunBaseline = (turn, used);
+            if (_trapStunTurn != turn && (enemySpells.Any(card => card.IsFaceup() && card.IsCode(TrapStun)) || used > _trapStunBaseline.Count))
+            {
+                _trapStunTurn = turn;
+                Log("Trap Stun resolved: no more traps this turn");
+            }
+        }
+
+        protected bool TrapsStunned => _trapStunTurn == CurrentHeader.CurrentTurn;
+
         private async Task SnapshotOwnMonstersAsync()
         {
+            UpdateTrapStun(await GetEnemySpellCardsAsync());
             var keys = (await GetBotMonsterCardsAsync()).Select(ZoneKey).ToHashSet();
+            var idsOnField = keys.Select(key => int.Parse(key.Split('@')[0])).ToHashSet();
+            foreach (var gone in _vayuSummoned.Where(x => x.Value != CurrentHeader.CurrentTurn && !idsOnField.Contains(x.Key)).Select(x => x.Key).ToList())
+                _vayuSummoned.Remove(gone);
             foreach (var key in keys.Where(key => !_ownFirstSeen.ContainsKey(key)))
                 _ownFirstSeen[key] = (++_ownSeenStamp, CurrentHeader.CurrentTurn);
             foreach (var gone in _ownFirstSeen.Keys.Where(key => !keys.Contains(key)).ToList())
@@ -349,7 +381,11 @@ namespace BotTest.Game.AI.Brains
             bool onlyPunishers = board.EnemyMonsters.Count > 0 && board.EnemyMonsters.All(card => card.IsFaceup() && card.IsCode(PunishesBattleDestruction));
             int strongestEnemyAttack = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.Attack).DefaultIfEmpty(0).Max();
             filtered.ReposableCards = (state.ReposableCards ?? Array.Empty<DynamicCard>())
-                .Where(card => !(card.IsCode(FearlessAttackers) && card.IsAttack() && !onlyPunishers))
+                .Where(card => !(card.IsCode(FearlessAttackers) && !IsNegated(card) && card.IsAttack() && !onlyPunishers))
+                // A face-up defender doesn't switch to attack just to be exposed: if something of theirs beats it and it
+                // has no real monster to beat (tokens don't count), it stays in defense.
+                .Where(card => !(card.IsFaceup() && card.IsDefense() && card.Attack < strongestEnemyAttack &&
+                    !board.EnemyMonsters.Any(enemy => enemy.IsFaceup() && (enemy.Type & TokenType) == 0 && enemy.GetRealPower() < card.Attack)))
                 .Where(card => !(card.IsCode(DestroysNonDarkInBattle) && card.IsAttack() && nonDarkTargets))
                 .Where(card => !(!card.IsFaceup() && card.Attack < 1500 && !canPump))
                 // With a pump in hand (Kalut) that makes it win against their strongest monster, a monster stays in
@@ -776,6 +812,9 @@ namespace BotTest.Game.AI.Brains
             if (!TryGetActivable(state, cardId, out var card))
                 return false;
 
+            if (TrapsStunned && card.HasType(CardType.Trap))
+                return false;
+
             if (IsTargetingCard(cardId) && (_targetingBlocked || (CostlyTargeting.Contains(cardId) && _tytannialActive)))
             {
                 Log($"Not activating {cardId}: Tytannial would negate it");
@@ -1016,7 +1055,7 @@ namespace BotTest.Game.AI.Brains
             for (int index = 0; index < attackers.Length; index++)
             {
                 var attacker = attackers[index];
-                if (!attacker.IsCode(FearlessAttackers) || attacker.Attacked)
+                if (!attacker.IsCode(FearlessAttackers) || attacker.Attacked || IsNegated(attacker))
                     continue;
 
                 // Not into Machina Fortress: destroying it in battle lets it destroy one of our cards (the attacker).
@@ -1127,6 +1166,13 @@ namespace BotTest.Game.AI.Brains
             if (!lethalIncoming && IsStardustBlocking(enemyMonsters, ownSpells, hand) && card.IsCode(DestructionCards))
                 return false;
 
+            UpdateTrapStun(enemySpells);
+            if (TrapsStunned && card.HasType(CardType.Trap))
+            {
+                Log($"Not chaining {card.ID}: Trap Stun negates traps this turn");
+                return false;
+            }
+
             if (IsTargetingCard(card.ID) &&
                 (IsTargetingBlocked(enemyMonsters) || (card.IsCode(CostlyTargeting) && IsTytannialActive(enemyMonsters))))
                 return false;
@@ -1219,6 +1265,14 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log($"Icarus in response to their removal: tributing {doomed[0].ID}, which goes anyway");
                     _icarusDoomed = doomed;
+                    return true;
+                }
+
+                // Their Heavy Storm takes Icarus anyway: half the time, use it on the way out (risky, so not always).
+                bool stormResolving = enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(HeavyStorm));
+                if (stormResolving && others.Count >= 2 && Rng.NextDouble() < 0.5)
+                {
+                    Log("Icarus in response to Heavy Storm: it would be destroyed anyway");
                     return true;
                 }
             }
@@ -1529,7 +1583,8 @@ namespace BotTest.Game.AI.Brains
                     .Select((card, index) => new { Card = card, Index = index })
                     .OrderByDescending(x => ScoreSynchro(x.Card.ID, board))
                     .First();
-                Log($"Extra Deck pick: {best.Card.ID} (score {ScoreSynchro(best.Card.ID, board)})");
+                Log($"Extra Deck pick: {best.Card.ID} (score {ScoreSynchro(best.Card.ID, board)}), effects negated (Vayu)");
+                _vayuSummoned[Key(best.Card)] = CurrentHeader.CurrentTurn;
                 return new List<byte> { (byte)best.Index };
             }
 

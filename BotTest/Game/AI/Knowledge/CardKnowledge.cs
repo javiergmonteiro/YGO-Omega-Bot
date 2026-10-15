@@ -128,6 +128,9 @@ namespace BotTest.Game.AI.Knowledge
 
         public const int MachinaForce = 58054262;
 
+        // Negates every trap on the field for the rest of the turn.
+        public const int TrapStun = 59616123;
+
         // Monsters whose summon searches the deck: what keeps an engine going while their GY is still empty.
         public static readonly int[] Searchers = { 42940404 /* Machina Gearframe */, 40044918 /* Elemental HERO Stratos */ };
 
