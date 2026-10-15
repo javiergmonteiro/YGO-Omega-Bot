@@ -202,8 +202,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
             // Blizzard without a revive target is still a 1300 body: better than passing with an empty board,
             // as long as nothing face-up on their side beats it.
+            // Not when Kalut can be the body instead: tuners are scarcer and wait, and Blizzard can revive Kalut later.
             bool blizzardAsBody = ownMonsters.Count == 0 && !blizzardHasTarget && enemyBestPower < 1300 &&
-                TryGetSummonable(state, BlizzardTheFarNorth, out _);
+                TryGetSummonable(state, BlizzardTheFarNorth, out _) &&
+                !TryGetSummonable(state, KalutTheMoonShadow, out _) && !TryGetMonsterSettable(state, KalutTheMoonShadow, out _);
 
             // Kalut normally stays in hand, but with an empty board and no other monster to play
             // it's better as a body (and with Black Whirlwind, a 1400 summon still searches Gale).
@@ -302,10 +304,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                     return kalut.NormalSummon();
                 }
 
-                // Otherwise Kalut is worth more in hand than as a blocker: take the hit unless it's actually dangerous.
-                if (IsInDanger(board) && TryGetMonsterSettable(state, KalutTheMoonShadow, out var kalutSet))
+                // With an empty board Kalut goes down rather than taking hits (Javier, 2026-10-15): set as a blocker
+                // when they have monsters, face-up to hit directly when they don't. Blizzard can bring it back later.
+                if (board.EnemyMonsters.Count == 0 && TryGetSummonable(state, KalutTheMoonShadow, out var kalutBody))
                 {
-                    Log("Only play and in danger: setting Kalut");
+                    Log("Only play: Kalut face-up, their field is empty");
+                    return kalutBody.NormalSummon();
+                }
+                if (TryGetMonsterSettable(state, KalutTheMoonShadow, out var kalutSet))
+                {
+                    Log("Only play: setting Kalut as a blocker");
                     return kalutSet.SetMonster();
                 }
             }
