@@ -1187,6 +1187,29 @@ namespace BotTest.Game.AI.Brains
             if (!attacker.HasValue || !attacker.Value.IsFaceup())
                 return false;
 
+            // Only when the attack costs something worth a card: lethal or a big hit going direct, or a valuable
+            // face-up monster of ours about to die. Not to save a set monster (Vayu is happy in the GY) or a small hit.
+            var attacking = attacker.Value;
+            var ownSide = CurrentField.OwnSide;
+            bool worthIt;
+            if (!ownSide.HasBattlingMonster)
+            {
+                worthIt = attacking.Attack >= ownSide.LifePoints || attacking.Attack >= 2000;
+            }
+            else
+            {
+                var defender = ownSide.BattlingMonster;
+                bool dies = defender.IsDefense() ? attacking.Attack > defender.Defense : attacking.Attack >= defender.Attack;
+                bool valuable = defender.IsFaceup() && (IsImportantMonster(defender) || defender.Attack >= 1700);
+                worthIt = dies && valuable;
+            }
+
+            if (!worthIt)
+            {
+                Log($"Book of Moon kept: the attack of {attacking.ID} isn't worth a card");
+                return false;
+            }
+
             _preferredTarget = attacker;
             return true;
         }
