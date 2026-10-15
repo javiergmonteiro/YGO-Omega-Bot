@@ -69,6 +69,12 @@ Cada entrada tiene:
 
 ---
 
+### Fin de match: 404 en el heartbeat (normal)
+- **Qué pasa:** al terminar el match, el bot desaparece de `/bot-list` y `/get-bot-state-header/{id}` devuelve 404. El log muestra `[ERROR] Heartbeat failed ... 404` seguido de `Duel finished.`.
+- **Consecuencia:** no es un bug del bot, no hay que arreglarlo. Solo preocupa si el 404 aparece en medio de un duelo.
+
+---
+
 ## 4. Cómo verificar antes de afirmar algo sobre la API
 
 1. Mirá `logs/<fecha>_<mazo>/decisiones.log`. Las líneas `[Trace] Answered X with [hex]` y `Empty ... raw: {json}` muestran el estado crudo y la respuesta exacta.
