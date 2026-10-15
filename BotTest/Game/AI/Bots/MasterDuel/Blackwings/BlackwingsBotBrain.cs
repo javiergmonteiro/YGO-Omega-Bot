@@ -19,9 +19,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         private static readonly int[] HandSpecialPriority = { DarkArmedDragon, BoraTheSpear, GaleTheWhirlwind };
 
         // Blizzard is handled separately (only with a GY target), Kalut stays in hand, Vayu gets set.
+        // Bora and Gale special summon themselves from hand once a Blackwing is on the field, so the normal summon
+        // goes to the ones that can't (Shura, Sirocco without tributes) and Bora/Gale follow for free.
         private static readonly int[] NormalSummonPriority =
         {
-            ShuraTheBlueFlame, BoraTheSpear, SiroccoTheDawn, GaleTheWhirlwind
+            ShuraTheBlueFlame, SiroccoTheDawn, BoraTheSpear, GaleTheWhirlwind
         };
 
         private static readonly int[] BlizzardTargets =
@@ -89,10 +91,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         // Gale and Sirocco target a card on the field (Tytannial can negate them).
         protected override int[] DeckTargetingCards { get; } = { GaleTheWhirlwind, SiroccoTheDawn };
 
-        protected override int[] ExcludedFromGenericSummon { get; } =
+        private static readonly int[] AlwaysExcludedFromGenericSummon =
         {
             BlizzardTheFarNorth, KalutTheMoonShadow, VayuTheEmblemOfHonor, SiroccoTheDawn
         };
+
+        // Monsters held back this decision (too weak face-up, DEF wouldn't hold) stay out of the generic summon too.
+        private readonly HashSet<int> _heldBack = new();
+
+        protected override int[] ExcludedFromGenericSummon => AlwaysExcludedFromGenericSummon.Concat(_heldBack).ToArray();
 
         // Sirocco's effect leaves only its target able to attack: it goes last, after any synchro,
         // and once used this turn we don't synchro (the synchro couldn't attack).
@@ -138,6 +145,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             var state = context.StateData;
             var hand = board.Hand;
             var ownMonsters = board.OwnMonsters;
+            _heldBack.Clear();
             _synchroAvailable = (state.SpecialSummonableCards ?? Array.Empty<DynamicCard>()).Any(card => card.IsCode(SynchroPriority));
 
             // Special summons from hand.
@@ -204,17 +212,35 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                 if (!TryGetSummonable(state, cardId, out var card))
                     continue;
 
+                // Against Gladiator Beasts play conservative: with a monster already out, keep Shura and Sirocco
+                // in hand. They struggle against big monsters they can't get past; wait for Bestiari.
+                if (board.VsGladiatorBeasts && cardId is ShuraTheBlueFlame or SiroccoTheDawn && ownMonsters.Any(m => m.IsFaceup()))
+                {
+                    Log($"Holding {cardId} (vs Gladiator Beasts: conservative)");
+                    _heldBack.Add(cardId);
+                    continue;
+                }
+
                 // Weaker than what they have and not a tuner we need: set it, unless the face-up summon is covered.
                 // A face-up Normal Summon triggers Black Whirlwind (Kalut search), and Kalut / set traps protect it.
                 bool summonIsCovered =
                     whirlwindsUp > 0 ||
                     hand.Any(h => h.IsCode(KalutTheMoonShadow)) ||
                     board.OwnSpells.Count(s => !s.IsFaceup()) >= 2;
-                if (card.Attack < enemyBestPower && !summonIsCovered && !card.HasType((CardType)CardKnowledge.TunerType) &&
-                    TryGetMonsterSettable(state, cardId, out var settable))
+                if (card.Attack < enemyBestPower && !summonIsCovered && !card.HasType((CardType)CardKnowledge.TunerType))
                 {
-                    Log($"Setting weak monster: {cardId}");
-                    return settable.SetMonster();
+                    // Face-down only helps if its DEF survives their strongest attacker; otherwise it just dies there.
+                    // Keep it in hand and try the next option.
+                    int enemyBestAttack = board.EnemyMonsters.Where(m => m.IsFaceup() && m.IsAttack()).Select(m => m.Attack).DefaultIfEmpty(0).Max();
+                    if (card.Defense > enemyBestAttack && TryGetMonsterSettable(state, cardId, out var settable))
+                    {
+                        Log($"Setting weak monster: {cardId} (DEF {card.Defense} holds)");
+                        return settable.SetMonster();
+                    }
+
+                    Log($"Holding {cardId}: too weak face-up and its DEF wouldn't hold");
+                    _heldBack.Add(cardId);
+                    continue;
                 }
 
                 Log($"Normal summon: {cardId}");

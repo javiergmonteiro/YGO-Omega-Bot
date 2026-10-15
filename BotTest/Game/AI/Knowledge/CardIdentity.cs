@@ -19,6 +19,14 @@ namespace BotTest.Game.AI.Knowledge
         private static readonly Dictionary<int, int> Canonicals = new();
         private static readonly HashSet<int> KnownIds = new();
         private static Dictionary<string, int>? _knownByName;
+        private static readonly Dictionary<int, string> Names = new();
+
+        /// <summary>Card name if it was looked up before (every ID seen in a decision is).</summary>
+        public static string? NameOf(int id)
+        {
+            lock (Canonicals)
+                return Names.TryGetValue(id, out var name) ? name : null;
+        }
 
         /// <summary>Registers IDs our rules refer to (public const ints, int[] fields and dictionary keys of a type).</summary>
         public static void RegisterKnownIds(Type type)
@@ -88,11 +96,17 @@ namespace BotTest.Game.AI.Knowledge
                 {
                     _knownByName = new Dictionary<string, int>();
                     foreach (var (id, name) in await FetchNamesAsync(KnownIds))
+                    {
                         _knownByName.TryAdd(name, id);
+                        lock (Canonicals)
+                            Names[id] = name;
+                    }
                 }
                 var names = await FetchNamesAsync(unknown);
                 lock (Canonicals)
                 {
+                    foreach (var (id, name) in names)
+                        Names[id] = name;
                     foreach (int id in unknown)
                     {
                         int canonical = KnownIds.Contains(id) ? id

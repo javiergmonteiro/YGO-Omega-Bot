@@ -66,6 +66,9 @@ namespace BotTest.Game.AI.Brains
             public required bool StardustBlocking { get; init; }
             public required bool ControlsStolenMonster { get; init; }
             public required bool TargetingBlocked { get; init; }
+
+            /// <summary>The opponent plays Gladiator Beasts (seen in their GY, banished, field or revealed hand).</summary>
+            public required bool VsGladiatorBeasts { get; init; }
         }
 
         // ---- Deck hooks -------------------------------------------------------------------------------
@@ -548,6 +551,7 @@ namespace BotTest.Game.AI.Brains
                 StardustBlocking = IsStardustBlocking(enemyMonsters, ownSpells, hand),
                 ControlsStolenMonster = ownMonsters.Any(IsStolen),
                 TargetingBlocked = _targetingBlocked,
+                VsGladiatorBeasts = OpponentPlaysArchetype(GladiatorBeastPrefix),
             };
         }
 
@@ -1012,6 +1016,15 @@ namespace BotTest.Game.AI.Brains
             if (Chain.AnsweredCurrentChain(CurrentHeader) && !icarusOnDyingMonster && !lethalIncoming && !card.HasType(CardType.Monster))
             {
                 Log($"Not chaining {card.ID}: already answered this chain");
+                return false;
+            }
+
+            // Against Gladiator Beasts, Bottomless waits for a key piece (Bestiari, Gyzarus, Heraklinos):
+            // the rest tag out anyway.
+            if (card.IsCode(BottomlessTrapHole) && OpponentPlaysArchetype(GladiatorBeastPrefix) &&
+                !enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsCode(GladiatorKeyMonsters)))
+            {
+                Log("Holding Bottomless for Bestiari / Gyzarus");
                 return false;
             }
 
@@ -1547,6 +1560,23 @@ namespace BotTest.Game.AI.Brains
         // Face-up normal / quick-play spells and normal traps are only there while they resolve.
         protected static bool IsLastingCard(DynamicCard card) =>
             card.HasType(CardType.Continuous) || card.HasType(CardType.Equip) || card.HasType(CardType.Field) || card.HasType(CardType.Monster);
+
+        // ---- Matchups -----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Whether the opponent plays an archetype, by card name (format versions included): any card of theirs seen
+        /// in the GY, banished, on the field, or revealed from hand.
+        /// </summary>
+        protected bool OpponentPlaysArchetype(string namePrefix)
+        {
+            var enemy = CurrentField.EnemySide;
+            var seen = (enemy.Grave ?? Array.Empty<int>())
+                .Concat(enemy.Banish ?? Array.Empty<int>())
+                .Concat((enemy.MonsterZones ?? Array.Empty<CardArray>()).Concat(enemy.SpellZones ?? Array.Empty<CardArray>())
+                    .SelectMany(zone => zone.Cards ?? Array.Empty<int>()))
+                .Concat(_revealedEnemyHand);
+            return seen.Any(id => id > 0 && (CardIdentity.NameOf(id)?.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
 
         // ---- Opponent's hand ----------------------------------------------------------------------------
 

@@ -57,7 +57,9 @@ namespace BotTest.Game.AI.Knowledge
             [88643579] = 2000,  // Dark End Dragon
             [50321816] = 2000,  // Brionac
             [9748752] = 1500,   // Caius the Shadow Monarch
-            [48156348] = 1500,  // Gladiator Beast Gyzarus
+            [GladiatorBeastBestiari] = 3000,   // priority one vs Gladiators
+            [48156348] = 2500,  // Gladiator Beast Gyzarus
+            [GladiatorBeastHeraklinos] = 2500,
             [33420078] = 1500,  // Plaguespreader Zombie
             [23205979] = 1000,  // Spirit Reaper
             [44330098] = 1000,  // Gorz
@@ -112,6 +114,13 @@ namespace BotTest.Game.AI.Knowledge
         public const int GorzTheEmissaryOfDarkness = 44330098;
         public const int DebrisDragon = 14943837;
         public const int DestinyHeroPlasma = 83965310;
+
+        // Gladiator Beasts: Bestiari is the key piece (backrow removal on tag-in, and it makes Gyzarus).
+        public const string GladiatorBeastPrefix = "Gladiator Beast";
+        public const int GladiatorBeastBestiari = 41470137;
+        public const int GladiatorBeastGyzarus = 48156348;
+        public const int GladiatorBeastHeraklinos = 27346636;
+        public static readonly int[] GladiatorKeyMonsters = { GladiatorBeastBestiari, GladiatorBeastGyzarus, GladiatorBeastHeraklinos };
 
         // Which monster to take out of their hand (Trap Dustshoot): hand traps that punish our attacks first,
         // then the pieces that start their combos next turn. Added on top of threat and stats.
