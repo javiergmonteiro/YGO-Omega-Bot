@@ -156,6 +156,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
                 if (TryGetSpecialSummon(state, cardId, out var card) && card.CurrentCoordinates.Location == (byte)CardLocation.Hand)
                 {
+                    if (ShouldAvoidOverextending(board, card))
+                        continue;
                     Log($"Special summon from hand: {cardId}");
                     return card.SpecialSummon();
                 }

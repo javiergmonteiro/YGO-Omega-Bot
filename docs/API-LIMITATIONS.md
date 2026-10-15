@@ -23,6 +23,10 @@ Cada entrada tiene:
 - **Qué pasa:** no sabemos si el índice de `ActivableCards` en un BattleCmd se respeta o tiene el mismo bug que el ataque.
 - **Consecuencia:** el bot solo activa desde BattleCmd (por ejemplo, Icarus en su battle step) si la carta es `ActivableCards[0]`. Si se confirma que el índice anda, se puede relajar.
 
+### #0c. No se controla el orden de ataque con la zona
+- **Qué pasa:** la lista `AttackableCards` viene ordenada por zona, de izquierda a derecha, y ataca la primera (#0). En `SelectPlace` el framework siempre responde `seq 0`, pero el juego coloca igual donde quiere: el primer monstruo va al centro (el `Filter` siguiente sale `0x1B`).
+- **Consecuencia:** elegir zona no sirve, hoy, para que Shura u otro monstruo ataque primero. Si algún día se confirma la codificación correcta de la zona, ahí está la solución al bug #0.
+
 ### #1. El replay de batalla nunca llega al bot custom
 - **Qué pasa:** cuando cambia el campo durante un ataque (Scapegoat, etc.), el juego no le pregunta al bot si quiere repetir el ataque. Se confirmó con la traza completa de estados: no llega ningún YesNo ni ningún estado sin manejar. El siguiente BattleCmd ya muestra a ese atacante como no disponible.
 - **Consecuencia:** ese ataque se pierde y el bot no lo puede evitar.

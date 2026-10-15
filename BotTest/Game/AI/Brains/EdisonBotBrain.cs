@@ -35,6 +35,33 @@ namespace BotTest.Game.AI.Brains
         private List<DynamicCard> NewEnemyMonsters(List<DynamicCard> enemyMonsters) =>
             enemyMonsters.Where(card => !_seenEnemyMonsters.Contains($"{Key(card)}@{card.CurrentCoordinates.Sequence}")).ToList();
 
+        // When each of our monsters (id@zone) was first seen (order stamp, turn): the latest one is the one just summoned.
+        private Dictionary<string, (int Stamp, int Turn)> _ownFirstSeen = new();
+        private int _ownSeenStamp;
+
+        private static string ZoneKey(DynamicCard card) => $"{Key(card)}@{card.CurrentCoordinates.Sequence}";
+
+        private async Task SnapshotOwnMonstersAsync()
+        {
+            var keys = (await GetBotMonsterCardsAsync()).Select(ZoneKey).ToHashSet();
+            foreach (var key in keys.Where(key => !_ownFirstSeen.ContainsKey(key)))
+                _ownFirstSeen[key] = (++_ownSeenStamp, CurrentHeader.CurrentTurn);
+            foreach (var gone in _ownFirstSeen.Keys.Where(key => !keys.Contains(key)).ToList())
+                _ownFirstSeen.Remove(gone);
+        }
+
+        // Our most recently summoned monster this turn (not seen yet counts as the newest).
+        private DynamicCard? JustSummoned(List<DynamicCard> ours) =>
+            ours.Where(card => card.IsFaceup())
+                .Select(card => new { Card = card, Seen = _ownFirstSeen.TryGetValue(ZoneKey(card), out var seen) ? seen : (int.MaxValue, CurrentHeader.CurrentTurn) })
+                .Where(x => x.Seen.Item2 == CurrentHeader.CurrentTurn)
+                .OrderByDescending(x => x.Seen.Item1)
+                .Select(x => (DynamicCard?)x.Card)
+                .FirstOrDefault();
+
+        // Our monsters that their resolving removal card will take anyway: Icarus tributes one of them for free.
+        private List<DynamicCard> _icarusDoomed = new();
+
         private void SnapshotEnemyMonsters(List<DynamicCard> enemyMonsters) =>
             _seenEnemyMonsters = enemyMonsters.Select(card => $"{Key(card)}@{card.CurrentCoordinates.Sequence}").ToHashSet();
 
@@ -251,6 +278,7 @@ namespace BotTest.Game.AI.Brains
             var response = await DecideIdleAsync(context, ct);
             Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
             SnapshotEnemyMonsters(await GetEnemyMonsterCardsAsync());
+            await SnapshotOwnMonstersAsync();
             // Anything but a phase change can start a chain of ours (summons, activations).
             Chain.SetOwnActionPending(response.Action is not (MainAction.ToBattlePhase or MainAction.ToEndPhase), CurrentHeader);
             return response;
@@ -341,6 +369,26 @@ namespace BotTest.Game.AI.Brains
                 .Select(card => card.Attack).OrderByDescending(attack => attack).ToList();
             int blockers = board.OwnMonsters.Count + extraBlockers;
             return attacks.Skip(blockers).Sum() >= CurrentField.OwnSide.LifePoints;
+        }
+
+        /// <summary>
+        /// Don't add one more body when it only feeds Mirror Force / Torrential: we already have a monster out,
+        /// they have 2+ set cards, those cards are still possible, and the extra monster neither makes lethal nor
+        /// is worth risking (tuners and important monsters still come down).
+        /// </summary>
+        protected bool ShouldAvoidOverextending(Board board, DynamicCard card)
+        {
+            if (!IsBotTurn || board.OwnMonsters.Count == 0 || board.EnemySpells.Count(spell => !spell.IsFaceup()) < 2)
+                return false;
+            if (card.HasType((CardType)TunerType) || IsImportantMonster(card) || !OpponentMayStillHave(board, PunishesOverextension))
+                return false;
+
+            int attack = board.OwnMonsters.Where(monster => monster.IsFaceup() && monster.IsAttack()).Sum(monster => monster.Attack) + card.Attack;
+            if (board.EnemyMonsters.Count == 0 && attack >= CurrentField.EnemySide.LifePoints)
+                return false;
+
+            LogOnChange($"Holding {card.ID}: 2+ set cards and Mirror Force / Torrential still possible");
+            return true;
         }
 
         // No monsters in their way and our attack-position monsters already deal at least their LP.
@@ -1040,6 +1088,7 @@ namespace BotTest.Game.AI.Brains
                     Chain.MarkOwnActivation(cards[i].HasType(CardType.Monster), CurrentHeader, Key(cards[i]));
                     Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
                     SnapshotEnemyMonsters(enemyMonsters);
+                    await SnapshotOwnMonstersAsync();
                     return i;
                 }
             }
@@ -1047,6 +1096,7 @@ namespace BotTest.Game.AI.Brains
             Chain.MarkPassed();
             Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
             SnapshotEnemyMonsters(enemyMonsters);
+            await SnapshotOwnMonstersAsync();
             return -1;
         }
 
@@ -1140,6 +1190,23 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log("Book of Moon on Stardust: our set destruction cards work this turn");
                     _preferredTarget = stardust;
+                    return true;
+                }
+            }
+
+            // Icarus in response to their removal (Bottomless on our summon, Mirror Force, Torrential, Prison...):
+            // tribute the monster they're taking anyway and destroy two of their cards. On either turn.
+            if (card.IsCode(IcarusAttack) && CurrentHeader.LastChainPlayer == ChainTracker.Opponent &&
+                !Chain.AlreadyChained(Key(card), CurrentHeader))
+            {
+                var doomed = await DoomedByTheirRemovalAsync(enemySpells);
+                var others = enemyMonsters.Where(monster => !IsProtectedByUnion(monster, enemySpells))
+                    .Concat(enemySpells.Where(spell => !spell.IsFaceup() || IsLastingCard(spell)))
+                    .Select(RemovalValue).OrderByDescending(value => value).Take(2).ToList();
+                if (doomed.Count > 0 && (others.Count >= 2 || others.Sum() >= 1500))
+                {
+                    Log($"Icarus in response to their removal: tributing {doomed[0].ID}, which goes anyway");
+                    _icarusDoomed = doomed;
                     return true;
                 }
             }
@@ -1309,6 +1376,24 @@ namespace BotTest.Game.AI.Brains
             return true;
         }
 
+        // Which of our monsters a removal card they're resolving takes: Bottomless the one just summoned, Mirror Force
+        // our attack-position monsters, Torrential all of them, Prison / Sakuretsu the one battling.
+        private async Task<List<DynamicCard>> DoomedByTheirRemovalAsync(List<DynamicCard> enemySpells)
+        {
+            var resolving = enemySpells.Where(spell => spell.IsFaceup() && !IsLastingCard(spell)).ToList();
+            var ours = await GetBotMonsterCardsAsync();
+            var doomed = new List<DynamicCard>();
+            if (resolving.Any(spell => spell.IsCode(TorrentialTribute)))
+                doomed.AddRange(ours);
+            if (resolving.Any(spell => spell.IsCode(MirrorForce)))
+                doomed.AddRange(ours.Where(monster => monster.IsAttack()));
+            if (resolving.Any(spell => spell.IsCode(BottomlessTrapHole)) && JustSummoned(ours) is DynamicCard summoned && summoned.Attack >= 1500)
+                doomed.Add(summoned);
+            if (resolving.Any(spell => spell.IsCode(DimensionalPrison, 56120475 /* Sakuretsu Armor */)) && CurrentField.OwnSide.HasBattlingMonster)
+                doomed.AddRange(ours.Where(monster => monster.CurrentCoordinates.Sequence == CurrentField.OwnSide.BattlingMonster.CurrentCoordinates.Sequence));
+            return doomed.DistinctBy(monster => monster.CurrentCoordinates.Sequence).ToList();
+        }
+
         // Solemn costs half our LP. Against a monster summon (not a chain link), keep it while a cheaper answer to
         // monsters is set: Bottomless (on the summon), Dimensional Prison / Mirror Force (on its attack).
         private static bool HasCheaperMonsterAnswer(List<DynamicCard> ownSpells, BotStateHeader header)
@@ -1388,6 +1473,19 @@ namespace BotTest.Game.AI.Brains
             // Costs and materials (Icarus tribute, synchro materials picked one by one): give up the least useful card.
             if (state.SelectionHint is (int)DHint.RELEASE or (int)DHint.TRIBUTE or (int)DHint.SMATERIAL && selectable.Length > 0)
             {
+                if (_icarusDoomed.Count > 0)
+                {
+                    var doomedSeqs = _icarusDoomed.Select(card => card.CurrentCoordinates.Sequence).ToHashSet();
+                    _icarusDoomed = new();
+                    int doomedIndex = Array.FindIndex(selectable, card => card.CurrentCoordinates.Controller == ChainTracker.Bot &&
+                        card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone && doomedSeqs.Contains(card.CurrentCoordinates.Sequence));
+                    if (doomedIndex >= 0)
+                    {
+                        Log($"{(DHint)state.SelectionHint}: {selectable[doomedIndex].ID} (it goes anyway)");
+                        return new List<byte> { (byte)doomedIndex };
+                    }
+                }
+
                 var cheapest = selectable
                     .Select((card, index) => new { Card = card, Index = index })
                     .OrderBy(x => MaterialCost(x.Card) - (IsBotTurn && x.Card.Attacked ? 3000 : 0))
