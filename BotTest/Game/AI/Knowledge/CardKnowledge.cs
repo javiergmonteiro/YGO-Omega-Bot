@@ -137,7 +137,8 @@ namespace BotTest.Game.AI.Knowledge
             [14943837] = 2000,  // Debris Dragon
             [42940404] = 2000,  // Machina Gearframe
             [48686504] = 2600,  // Lonefire Blossom (fetches a Plant from the deck, e.g. Tytannial, for free)
-            [40044918] = 2000,  // Elemental HERO Stratos
+            [40044918] = 2700,  // Elemental HERO Stratos (searches a HERO, e.g. Destiny HERO - Plasma)
+            [58054262] = 2700,  // Machina Force (level 10 discard: revives Machina Fortress for free)
             [9748752] = 1800,   // Caius the Shadow Monarch
             [73125233] = 1800,  // Raiza the Storm Monarch
             [26205777] = 1800,  // Thestalos the Firestorm Monarch
@@ -165,6 +166,21 @@ namespace BotTest.Game.AI.Knowledge
 
         // Take the monster they destroy in battle: attack with them first, into the best monster to steal.
         public static readonly int[] StealsOnBattle = { GoyoGuardian };
+
+        // Traps that answer an attack declaration (banish, destroy, reflect or stop the attacker).
+        public static readonly int[] AttackResponseTraps =
+        {
+            DimensionalPrison, MirrorForce, 56120475 /* Sakuretsu Armor */, 62279055 /* Magic Cylinder */,
+            14315573 /* Negate Attack */, 12607053 /* Waboku */
+        };
+
+        // Monsters whose effect fires as they're summoned (field wipe, backrow removal, discard...): answering after the
+        // summon (Bottomless, Prison) is too late, Solemn Judgment on the summon itself is the answer.
+        public static readonly int[] SolemnPriorityTargets =
+        {
+            BlackRoseDragon, 9748752 /* Caius */, 73125233 /* Raiza */, 26205777 /* Thestalos */,
+            GladiatorBeastBestiari, GladiatorBeastGyzarus
+        };
 
         // Can't be destroyed by battle and take no battle damage: they should always attack.
         public static readonly int[] FearlessAttackers = { BlackwingArmorMaster };

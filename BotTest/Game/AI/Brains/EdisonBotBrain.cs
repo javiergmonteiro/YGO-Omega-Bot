@@ -29,9 +29,38 @@ namespace BotTest.Game.AI.Brains
 
         private string? _lastRepeatedLog;
 
+        // Enemy monsters (id@zone) at our previous decision, to spot the one being summoned now.
+        private HashSet<string> _seenEnemyMonsters = new();
+
+        private List<DynamicCard> NewEnemyMonsters(List<DynamicCard> enemyMonsters) =>
+            enemyMonsters.Where(card => !_seenEnemyMonsters.Contains($"{Key(card)}@{card.CurrentCoordinates.Sequence}")).ToList();
+
+        private void SnapshotEnemyMonsters(List<DynamicCard> enemyMonsters) =>
+            _seenEnemyMonsters = enemyMonsters.Select(card => $"{Key(card)}@{card.CurrentCoordinates.Sequence}").ToHashSet();
+
         // Cards seen in the opponent's hand (Trap Dustshoot) and the turn they were seen, for later rules.
         private List<int> _revealedEnemyHand = new();
         private int _revealedHandTurn = -1;
+        private Dictionary<int, int> _revealedPublicBaseline = new();
+
+        // Copies of a card the opponent has in public zones (GY, banished, field).
+        private int EnemyPublicCount(int cardId)
+        {
+            var enemy = CurrentField.EnemySide;
+            return (enemy.Grave ?? Array.Empty<int>())
+                .Concat(enemy.Banish ?? Array.Empty<int>())
+                .Concat((enemy.MonsterZones ?? Array.Empty<CardArray>()).Concat(enemy.SpellZones ?? Array.Empty<CardArray>())
+                    .SelectMany(zone => zone.Cards ?? Array.Empty<int>()))
+                .Count(id => id > 0 && CardIdentity.Same(id, cardId));
+        }
+
+        /// <summary>
+        /// A card seen in their hand that is probably still there: no copy has shown up in public since the reveal.
+        /// Once one does (activated, destroyed while set...), the one we saw is the one that left.
+        /// </summary>
+        protected bool StillInRevealedHand(int cardId) =>
+            _revealedEnemyHand.Any(id => CardIdentity.Same(id, cardId)) &&
+            EnemyPublicCount(cardId) <= (_revealedPublicBaseline.TryGetValue(CardIdentity.Canonical(cardId), out int seen) ? seen : 0);
 
         // Attack declared expecting Book of Moon on this monster in the declaration window.
         private DynamicCard? _moonOnAttack;
@@ -96,6 +125,10 @@ namespace BotTest.Game.AI.Brains
 
         /// <summary>Deck cards whose activation targets a card on the field (blocked by Tytannial).</summary>
         protected virtual int[] DeckTargetingCards => Array.Empty<int>();
+
+        /// <summary>Monsters worth protecting from battle traps: Extra Deck monsters and big beaters (2300+ base ATK).</summary>
+        protected virtual bool IsImportantMonster(DynamicCard card) =>
+            card.IsExtraCard() || (card.BaseAttack > 0 ? card.BaseAttack : card.Attack) >= 2300;
 
         /// <summary>Our monsters with an effect when they destroy a monster by battle (attack first, never into tokens).</summary>
         protected virtual int[] OnBattleDestroyAttackers => Array.Empty<int>();
@@ -173,6 +206,12 @@ namespace BotTest.Game.AI.Brains
             CardIdentity.Normalize(offered);
         }
 
+        // ---- Attack index limitation ----------------------------------------------------------------------
+        // The game ignores the attack index we send and always attacks with the first monster of AttackableCards
+        // (18 of 18 requests with index >= 1 attacked with index 0; every index-0 request went through). Until Omega
+        // fixes it, each battle decision is made for that first monster only.
+        private static BattleCmdResponse AttackWith(DynamicCard attacker) => attacker.DeclareAttack();
+
         protected override async Task<List<DynamicCard>> GetEnemyMonsterCardsAsync(bool onlyFaceUp = false) =>
             CardIdentity.Normalize(await base.GetEnemyMonsterCardsAsync(onlyFaceUp));
 
@@ -207,10 +246,11 @@ namespace BotTest.Game.AI.Brains
 
         // ---- Idle (Main Phase) ------------------------------------------------------------------------
 
-        public override async Task<IdleCmdResponse> OnIdleCmdAsync(DecisionContext<IdleCmdData> context, CancellationToken ct = default)
+        private async Task<IdleCmdResponse> DecideIdleCmdCoreAsync(DecisionContext<IdleCmdData> context, CancellationToken ct)
         {
             var response = await DecideIdleAsync(context, ct);
             Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
+            SnapshotEnemyMonsters(await GetEnemyMonsterCardsAsync());
             // Anything but a phase change can start a chain of ours (summons, activations).
             Chain.SetOwnActionPending(response.Action is not (MainAction.ToBattlePhase or MainAction.ToEndPhase), CurrentHeader);
             return response;
@@ -272,10 +312,9 @@ namespace BotTest.Game.AI.Brains
                 .Where(card => !(card.IsCode(FearlessAttackers) && card.IsAttack() && !onlyPunishers))
                 .Where(card => !(card.IsCode(DestroysNonDarkInBattle) && card.IsAttack() && nonDarkTargets))
                 .Where(card => !(!card.IsFaceup() && card.Attack < 1500 && !canPump))
-                // A battle-destroy monster (Shura) with a pump in hand (Kalut) stays in attack: if they attack it,
-                // the pump wins that battle and its effect triggers on their turn too. Bait, not a liability.
-                .Where(card => !(card.IsCode(OnBattleDestroyAttackers) && card.IsAttack() && canPump &&
-                                 card.Attack + BattleBoostInHand(board.Hand) > strongestEnemyAttack))
+                // With a pump in hand (Kalut) that makes it win against their strongest monster, a monster stays in
+                // attack: if they attack it, the pump wins the battle (and Shura's effect triggers on their turn too).
+                .Where(card => !(card.IsAttack() && canPump && card.Attack + BattleBoostInHand(board.Hand) > strongestEnemyAttack))
                 .ToArray();
             return await base.OnIdleCmdAsync(context with { StateData = filtered }, ct);
         }
@@ -289,6 +328,19 @@ namespace BotTest.Game.AI.Brains
             var enemy = CurrentField.EnemySide;
             var faceUp = board.EnemyMonsters.Concat(board.EnemySpells).Where(card => card.IsFaceup()).Select(card => card.ID).ToList();
             return cardIds.Any(id => CardCounter.OpponentCopiesLeft(id, enemy.Grave, enemy.Banish, faceUp) > 0);
+        }
+
+        /// <summary>
+        /// Their face-up attack-position monsters can deal our LP this turn. Each of our monsters (plus any extra
+        /// blockers we're about to add) stops one attack, so the direct damage is the sum of the attacks left over
+        /// after their biggest ones are spent on our blockers.
+        /// </summary>
+        protected bool OpponentHasLethal(Board board, int extraBlockers = 0)
+        {
+            var attacks = board.EnemyMonsters.Where(card => card.IsFaceup() && card.IsAttack())
+                .Select(card => card.Attack).OrderByDescending(attack => attack).ToList();
+            int blockers = board.OwnMonsters.Count + extraBlockers;
+            return attacks.Skip(blockers).Sum() >= CurrentField.OwnSide.LifePoints;
         }
 
         // No monsters in their way and our attack-position monsters already deal at least their LP.
@@ -682,16 +734,23 @@ namespace BotTest.Game.AI.Brains
 
         // ---- Battle ------------------------------------------------------------------------------------
 
-        public override async Task<BattleCmdResponse> OnBattleCmdAsync(DecisionContext<BattleCmdData> context, CancellationToken ct = default)
+        private async Task<BattleCmdResponse> DecideBattleCmdCoreAsync(DecisionContext<BattleCmdData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync(context.StateData.AttackableCards);
             _forcedAttackTarget = null;
 
             var attackers = context.StateData.AttackableCards ?? Array.Empty<DynamicCard>();
+            var allAttackers = attackers;
+            if (attackers.Length > 1)
+            {
+                // Only the first listed monster can actually attack (see AttackWith).
+                LogOnChange($"Only the first attacker can be chosen ({attackers[0].ID}); the rest wait their turn in the list");
+                attackers = new[] { attackers[0] };
+            }
 
             // We saw Mirror Force in their hand and they have set cards: one attack per battle, not the whole board.
-            bool mirrorKnown = _revealedEnemyHand.Contains(MirrorForce) &&
+            bool mirrorKnown = StillInRevealedHand(MirrorForce) &&
                 CardCounter.OpponentCopiesLeft(MirrorForce, CurrentField.EnemySide.Grave, CurrentField.EnemySide.Banish, Array.Empty<int>()) > 0;
             bool setBackrow = (await GetEnemySpellCardsAsync()).Any(card => !card.IsFaceup());
             bool alreadyAttacked = (await GetBotMonsterCardsAsync()).Any(card => card.Attacked);
@@ -699,6 +758,24 @@ namespace BotTest.Game.AI.Brains
             {
                 Log("Mirror Force seen in their hand: one attack only, the rest stay back");
                 return context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
+            }
+
+            // A battle trap seen in their hand (Dimensional Prison, Sakuretsu...) with cards set: our important monsters
+            // (synchros, big beaters) don't walk into it unless the attack wins the duel. Only the first listed monster
+            // can attack (API limitation), so this decides for it.
+            // Holding the first attacker also holds everyone behind it (the API only attacks with the first one),
+            // so with other attackers waiting it attacks anyway: the trap takes one monster either way.
+            var knownBattleTrap = AttackResponseTraps.FirstOrDefault(StillInRevealedHand);
+            bool othersWaiting = allAttackers.Skip(1).Any(card => !card.Attacked);
+            if (knownBattleTrap != 0 && setBackrow && attackers.Length > 0 && !othersWaiting && IsImportantMonster(attackers[0]))
+            {
+                bool winsNow = (await GetEnemyMonsterCardsAsync()).Count == 0 && attackers[0].CanDirectAttack &&
+                    attackers[0].Attack >= CurrentField.EnemySide.LifePoints;
+                if (!winsNow)
+                {
+                    Log($"{attackers[0].ID} stays back: {knownBattleTrap} was seen in their hand");
+                    return context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
+                }
             }
 
             // They control no cards and may hold Gorz: its token gets the damage of the attack, so poke with the
@@ -717,7 +794,7 @@ namespace BotTest.Game.AI.Brains
                 if (weakest >= 0)
                 {
                     Log($"{attackers[weakest].ID} attacks first (weakest) in case of Gorz{(_revealedEnemyHand.Contains(GorzTheEmissaryOfDarkness) ? " (seen in hand)" : "")}");
-                    return attackers[weakest].DeclareAttack();
+                    return AttackWith(attackers[weakest]);
                 }
             }
 
@@ -746,18 +823,36 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log($"{trigger.ID} attacks {target.ID} first (its effect needs a monster sent to the GY)");
                     _forcedAttackTarget = target;
-                    return trigger.DeclareAttack();
+                    return AttackWith(trigger);
                 }
             }
 
             // Book of Moon at attack declaration: attack a blocker we can't beat face-up but whose DEF we beat,
             // and flip it face-down in the declaration window. Monsters with a battle-destroy effect go first.
-            if (handNow.Any(card => card.IsCode(BookOfMoon)) && !_targetingBlocked)
+            if (attackers.Length > 0 && handNow.Any(card => card.IsCode(BookOfMoon)) && !_targetingBlocked)
             {
                 var ordered = Enumerable.Range(0, attackers.Length)
                     .Where(i => !attackers[i].Attacked)
                     .OrderByDescending(i => attackers[i].IsCode(OnBattleDestroyAttackers))
                     .ThenByDescending(i => attackers[i].Attack);
+                // A battle-destroy monster (Shura) later in the list gets more out of the Moon: if the first attacker
+                // has another attack that wins on its own, take that one and keep the Moon for the next declaration.
+                bool triggerWaiting = !attackers[0].IsCode(OnBattleDestroyAttackers) &&
+                    allAttackers.Skip(1).Any(card => card.IsCode(OnBattleDestroyAttackers) && !card.Attacked);
+                if (triggerWaiting)
+                {
+                    var plainWin = battleTargets
+                        .Where(card => GetAttackScore(attackers[0], card) > 0)
+                        .OrderByDescending(card => GetAttackScore(attackers[0], card))
+                        .FirstOrDefault();
+                    if (plainWin.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone)
+                    {
+                        Log($"{attackers[0].ID} attacks {plainWin.ID}; Book of Moon kept for the battle-destroy monster next in line");
+                        _forcedAttackTarget = plainWin;
+                        return AttackWith(attackers[0]);
+                    }
+                }
+
                 foreach (int i in ordered)
                 {
                     var attacker = attackers[i];
@@ -773,7 +868,7 @@ namespace BotTest.Game.AI.Brains
                     Log($"{attacker.ID} attacks {blocker.ID}, Book of Moon at declaration");
                     _forcedAttackTarget = blocker;
                     _moonOnAttack = blocker;
-                    return attacker.DeclareAttack();
+                    return AttackWith(attacker);
                 }
             }
 
@@ -794,7 +889,7 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log($"{thief.ID} attacks first to steal {target.ID}");
                     _forcedAttackTarget = target;
-                    return thief.DeclareAttack();
+                    return AttackWith(thief);
                 }
             }
 
@@ -813,7 +908,7 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log($"{destroyer.ID} attacks non-DARK {target.ID} (destroyed by its effect)");
                     _forcedAttackTarget = target;
-                    return destroyer.DeclareAttack();
+                    return AttackWith(destroyer);
                 }
             }
 
@@ -830,7 +925,7 @@ namespace BotTest.Game.AI.Brains
                 {
                     Log($"{attacker.ID} attacks {target.ID}");
                     _forcedAttackTarget = target;
-                    return attacker.DeclareAttack();
+                    return AttackWith(attacker);
                 }
             }
 
@@ -850,7 +945,7 @@ namespace BotTest.Game.AI.Brains
                 if (direct < 0)
                     return Task.FromResult(Done());
                 Log($"{attackers[direct].ID} attacks directly");
-                return Task.FromResult(attackers[direct].DeclareAttack());
+                return Task.FromResult(AttackWith(attackers[direct]));
             }
 
             var best = ready
@@ -863,7 +958,7 @@ namespace BotTest.Game.AI.Brains
             {
                 Log($"{attackers[best.Index].ID} attacks {best.Target.ID}");
                 _forcedAttackTarget = best.Target;
-                return Task.FromResult(attackers[best.Index].DeclareAttack());
+                return Task.FromResult(AttackWith(attackers[best.Index]));
             }
 
             // A face-down defender (unknown DEF): poke it with the strongest attacker.
@@ -873,7 +968,7 @@ namespace BotTest.Game.AI.Brains
                 int strongest = ready.OrderByDescending(i => attackers[i].Attack).First();
                 Log($"{attackers[strongest].ID} attacks a face-down monster");
                 _forcedAttackTarget = faceDown;
-                return Task.FromResult(attackers[strongest].DeclareAttack());
+                return Task.FromResult(AttackWith(attackers[strongest]));
             }
 
             return Task.FromResult(Done());
@@ -881,7 +976,7 @@ namespace BotTest.Game.AI.Brains
 
         // ---- Chain -------------------------------------------------------------------------------------
 
-        public override async Task<int> OnSelectChainAsync(DecisionContext<SelectChainData> context, CancellationToken ct = default)
+        private async Task<int> DecideSelectChainCoreAsync(DecisionContext<SelectChainData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync(context.StateData.SelectableCards);
@@ -904,12 +999,14 @@ namespace BotTest.Game.AI.Brains
                     Log($"Chaining {cards[i].ID}");
                     Chain.MarkOwnActivation(cards[i].HasType(CardType.Monster), CurrentHeader, Key(cards[i]));
                     Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
+                    SnapshotEnemyMonsters(enemyMonsters);
                     return i;
                 }
             }
 
             Chain.MarkPassed();
             Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
+            SnapshotEnemyMonsters(enemyMonsters);
             return -1;
         }
 
@@ -1032,7 +1129,8 @@ namespace BotTest.Game.AI.Brains
             {
                 DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints),
                 MirrorForce => attacker.HasValue && (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
-                SolemnJudgment => lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader),
+                SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
+                    (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),
                 MysticalSpaceTyphoon => ShouldChainMst(enemySpells),
                 BookOfMoon => UseBookOfMoonOnAttacker(attacker),
@@ -1110,6 +1208,18 @@ namespace BotTest.Game.AI.Brains
             return lethal || attackingCard.Attack >= 1900;
         }
 
+        // The monster being summoned has an effect that fires on summon (Black Rose wiping the field, a Monarch,
+        // Bestiari): only Solemn stops it, so pay the LP whatever our total, and before any cheaper answer.
+        private bool SolemnOnSummonThreat(List<DynamicCard> enemyMonsters)
+        {
+            var summoning = NewEnemyMonsters(enemyMonsters).FirstOrDefault(card => card.IsCode(SolemnPriorityTargets));
+            if (summoning.ID == 0)
+                return false;
+
+            Log($"Solemn on the summon of {summoning.ID}: its effect fires on summon");
+            return true;
+        }
+
         // Solemn costs half our LP. Against a monster summon (not a chain link), keep it while a cheaper answer to
         // monsters is set: Bottomless (on the summon), Dimensional Prison / Mirror Force (on its attack).
         private static bool HasCheaperMonsterAnswer(List<DynamicCard> ownSpells, BotStateHeader header)
@@ -1155,13 +1265,13 @@ namespace BotTest.Game.AI.Brains
             int tributeValue = tribute.ID == 0 || IsStolen(tribute) || (tribute.Type & TokenType) != 0 ? 0 : ThreatScore(tribute) / 2;
             int gain = targets.Sum();
             int cost = 1500 + tributeValue;
-            Log($"Icarus check: gain={gain} cost={cost}");
+            LogOnChange($"Icarus check: gain={gain} cost={cost}");
             return gain >= cost;
         }
 
         // ---- Card selection ----------------------------------------------------------------------------
 
-        public override async Task<IList<byte>?> OnSelectCardAsync(DecisionContext<SelectCardData> context, CancellationToken ct = default)
+        private async Task<IList<byte>?> DecideSelectCardCoreAsync(DecisionContext<SelectCardData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync(context.StateData.SelectableCards);
@@ -1349,7 +1459,7 @@ namespace BotTest.Game.AI.Brains
             return null;
         }
 
-        public override async Task<IList<byte>?> OnSelectTributeAsync(DecisionContext<SelectTributeData> context, CancellationToken ct = default)
+        private async Task<IList<byte>?> DecideSelectTributeCoreAsync(DecisionContext<SelectTributeData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync(context.StateData.SelectableCards);
@@ -1366,7 +1476,7 @@ namespace BotTest.Game.AI.Brains
             return picks;
         }
 
-        public override async Task<IList<byte>?> OnSelectSumAsync(DecisionContext<SelectSumData> context, CancellationToken ct = default)
+        private async Task<IList<byte>?> DecideSelectSumCoreAsync(DecisionContext<SelectSumData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync(context.StateData.SelectableCards);
@@ -1388,9 +1498,82 @@ namespace BotTest.Game.AI.Brains
             return await base.OnSelectSumAsync(context, ct);
         }
 
+        // ---- Safety net ---------------------------------------------------------------------------------
+        // A bug in our own rules must not kill the bot mid-duel: log it and fall back to the framework's answer.
+
+        public override async Task<IdleCmdResponse> OnIdleCmdAsync(DecisionContext<IdleCmdData> context, CancellationToken ct = default)
+        {
+            try { return await DecideIdleCmdCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnIdleCmdAsync failed, using the default answer: {ex}");
+                return await base.OnIdleCmdAsync(context, ct);
+            }
+        }
+
+        public override async Task<BattleCmdResponse> OnBattleCmdAsync(DecisionContext<BattleCmdData> context, CancellationToken ct = default)
+        {
+            try { return await DecideBattleCmdCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnBattleCmdAsync failed, using the default answer: {ex}");
+                return await base.OnBattleCmdAsync(context, ct);
+            }
+        }
+
+        public override async Task<int> OnSelectChainAsync(DecisionContext<SelectChainData> context, CancellationToken ct = default)
+        {
+            try { return await DecideSelectChainCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnSelectChainAsync failed, using the default answer: {ex}");
+                return await base.OnSelectChainAsync(context, ct);
+            }
+        }
+
+        public override async Task<IList<byte>?> OnSelectCardAsync(DecisionContext<SelectCardData> context, CancellationToken ct = default)
+        {
+            try { return await DecideSelectCardCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnSelectCardAsync failed, using the default answer: {ex}");
+                return await base.OnSelectCardAsync(context, ct);
+            }
+        }
+
+        public override async Task<IList<byte>?> OnSelectTributeAsync(DecisionContext<SelectTributeData> context, CancellationToken ct = default)
+        {
+            try { return await DecideSelectTributeCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnSelectTributeAsync failed, using the default answer: {ex}");
+                return await base.OnSelectTributeAsync(context, ct);
+            }
+        }
+
+        public override async Task<IList<byte>?> OnSelectSumAsync(DecisionContext<SelectSumData> context, CancellationToken ct = default)
+        {
+            try { return await DecideSelectSumCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnSelectSumAsync failed, using the default answer: {ex}");
+                return await base.OnSelectSumAsync(context, ct);
+            }
+        }
+
+        public override async Task<CardPosition> OnSelectPositionAsync(DecisionContext<SelectPositionData> context, CancellationToken ct = default)
+        {
+            try { return await DecideSelectPositionCoreAsync(context, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log($"[ERROR] OnSelectPositionAsync failed, using the default answer: {ex}");
+                return await base.OnSelectPositionAsync(context, ct);
+            }
+        }
+
         // Summon position: monsters that can't be destroyed by battle (Armor Master) stall in defense when the only
         // opposing monsters punish being destroyed in battle. Everything else keeps the default.
-        public override async Task<CardPosition> OnSelectPositionAsync(DecisionContext<SelectPositionData> context, CancellationToken ct = default)
+        private async Task<CardPosition> DecideSelectPositionCoreAsync(DecisionContext<SelectPositionData> context, CancellationToken ct)
         {
             await PrepareContextAsync(context, ct);
             await NormalizeAsync();
@@ -1403,6 +1586,16 @@ namespace BotTest.Game.AI.Brains
             if (fearless && onlyPunishers && positions.Contains((byte)CardPosition.FaceUpDefence))
             {
                 Log($"{cardId} in defense: attacking only helps their Machina Fortress");
+                return CardPosition.FaceUpDefence;
+            }
+
+            // No battle left for us this turn (turn 1, Main Phase 2): an indestructible monster waits in defense, so they
+            // can't crash a Machina Fortress into it to trigger its effect. Nothing is lost: it couldn't attack anyway.
+            var phase = (DuelPhase)context.Header.CurrentPhase;
+            bool noBattleThisTurn = context.Header.CurrentTurn == 1 || phase == DuelPhase.Main2;
+            if (fearless && noBattleThisTurn && positions.Contains((byte)CardPosition.FaceUpDefence))
+            {
+                Log($"{cardId} in defense: it can't attack this turn");
                 return CardPosition.FaceUpDefence;
             }
 
@@ -1616,6 +1809,7 @@ namespace BotTest.Game.AI.Brains
                 await CardIdentity.EnsureAsync(revealedIds.Concat(result.Select(card => card.ID)));
                 _revealedEnemyHand = revealedIds.Select(CardIdentity.Canonical).ToList();
                 _revealedHandTurn = CurrentHeader.CurrentTurn;
+                _revealedPublicBaseline = _revealedEnemyHand.Distinct().ToDictionary(id => id, EnemyPublicCount);
                 Log($"Revealed hand: {string.Join(",", _revealedEnemyHand)}");
             }
             catch (Exception)

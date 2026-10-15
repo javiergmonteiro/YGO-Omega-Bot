@@ -214,7 +214,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
                 // Against Gladiator Beasts play conservative: with a monster already out, keep Shura and Sirocco
                 // in hand. They struggle against big monsters they can't get past; wait for Bestiari.
-                if (board.VsGladiatorBeasts && cardId is ShuraTheBlueFlame or SiroccoTheDawn && ownMonsters.Any(m => m.IsFaceup()))
+                if (board.VsGladiatorBeasts && cardId is ShuraTheBlueFlame or SiroccoTheDawn && ownMonsters.Any(m => m.IsFaceup()) &&
+                    !OpponentHasLethal(board))
                 {
                     Log($"Holding {cardId} (vs Gladiator Beasts: conservative)");
                     _heldBack.Add(cardId);
@@ -236,6 +237,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                     {
                         Log($"Setting weak monster: {cardId} (DEF {card.Defense} holds)");
                         return settable.SetMonster();
+                    }
+
+                    // Conservative, but not to the point of losing: facing lethal, any blocker buys a turn.
+                    if (OpponentHasLethal(board) && TryGetMonsterSettable(state, cardId, out var blocker))
+                    {
+                        Log($"Setting {cardId} as a blocker: they have lethal on board");
+                        return blocker.SetMonster();
                     }
 
                     Log($"Holding {cardId}: too weak face-up and its DEF wouldn't hold");
@@ -277,7 +285,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         protected override async Task<bool?> ShouldChainDeckCardAsync(DynamicCard card)
         {
             if (card.IsCode(KalutTheMoonShadow))
+            {
+                _enemyMonstersNow = await GetEnemyMonsterCardsAsync();
+                _ownMonstersNow = await GetBotMonsterCardsAsync();
                 return ShouldUseKalut();
+            }
 
             if (card.IsCode(SiroccoTheDawn))
                 return await ShouldUseSiroccoNowAsync();
@@ -411,13 +423,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         {
             int lifePoints = CurrentField.OwnSide.LifePoints;
             int enemyDamage = board.EnemyMonsters.Where(card => card.IsFaceup() && card.IsAttack()).Sum(card => card.Attack);
-            return lifePoints <= 3000 || enemyDamage >= lifePoints;
+            return lifePoints <= 3000 || enemyDamage >= lifePoints || OpponentHasLethal(board);
         }
 
         // Kalut (+1400 in the damage step) only when it flips the battle:
         //  - they're about to destroy one of our important monsters (Shura above all), or
         //  - our attack wouldn't destroy their monster without it, or
         //  - it makes a direct attack lethal.
+        // Fields at the last chain decision, for the Kalut look-ahead.
+        private List<DynamicCard>? _enemyMonstersNow;
+        private List<DynamicCard>? _ownMonstersNow;
+
         private bool ShouldUseKalut()
         {
             var ownSide = CurrentField.OwnSide;
@@ -460,7 +476,28 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                 return false;
             bool important = ours.IsCode(ShuraTheBlueFlame) || ours.IsExtraCard() || ours.Attack >= 1700;
             bool wouldDie = theirs.Attack >= ours.Attack;
-            return important && wouldDie && ours.Attack + boost > theirs.Attack;
+            if (!(important && wouldDie && ours.Attack + boost > theirs.Attack))
+                return false;
+
+            // With a single Kalut, keep it if a bigger threat still has to attack and the boost would beat it
+            // defending one of our monsters (e.g. Plasma into Shura, after Stratos into Bora).
+            int kalutsInHand = (ownSide.Hand ?? Array.Empty<int>()).Count(id => CardIdentity.Same(id, KalutTheMoonShadow));
+            if (kalutsInHand <= 1 && _enemyMonstersNow != null)
+            {
+                var biggerThreat = _enemyMonstersNow
+                    .Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked)
+                    .Where(card => card.CurrentCoordinates.Sequence != theirs.CurrentCoordinates.Sequence)
+                    .Where(card => ThreatScore(card) > ThreatScore(theirs))
+                    .FirstOrDefault(card => _ownMonstersNow!.Any(own => own.IsAttack() &&
+                        own.CurrentCoordinates.Sequence != ours.CurrentCoordinates.Sequence &&
+                        own.Attack <= card.Attack && own.Attack + boost > card.Attack));
+                if (biggerThreat.ID != 0)
+                {
+                    Log($"Kalut kept for {biggerThreat.ID}, still to attack");
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
