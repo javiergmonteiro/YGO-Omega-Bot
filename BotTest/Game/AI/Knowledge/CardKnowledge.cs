@@ -126,6 +126,11 @@ namespace BotTest.Game.AI.Knowledge
         public const int GladiatorBeastHeraklinos = 27346636;
         public static readonly int[] GladiatorKeyMonsters = { GladiatorBeastBestiari, GladiatorBeastGyzarus, GladiatorBeastHeraklinos };
 
+        public const int MachinaForce = 58054262;
+
+        // Monsters whose summon searches the deck: what keeps an engine going while their GY is still empty.
+        public static readonly int[] Searchers = { 42940404 /* Machina Gearframe */, 40044918 /* Elemental HERO Stratos */ };
+
         // Which monster to take out of their hand (Trap Dustshoot): hand traps that punish our attacks first,
         // then the pieces that start their combos next turn. Added on top of threat and stats.
         public static readonly IReadOnlyDictionary<int, int> HandPriority = new Dictionary<int, int>

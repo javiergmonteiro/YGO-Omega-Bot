@@ -125,8 +125,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             return false;
         }
 
-        protected override int HandValue(DynamicCard card) =>
-            card.IsCode(KalutTheMoonShadow, GaleTheWhirlwind) ? 3 : base.HandValue(card);
+        protected override int HandValue(DynamicCard card)
+        {
+            if (card.IsCode(KalutTheMoonShadow, GaleTheWhirlwind))
+                return 3;
+            // Dark Armed Dragon needs exactly three DARKs in the GY: with fewer than two it's a dead card for turns,
+            // so Allure banishes it before a Blackwing that can hit the field (Sirocco, 2026-10-15).
+            if (card.IsCode(DarkArmedDragon))
+            {
+                int darksInGrave = (CurrentField.OwnSide.Grave ?? Array.Empty<int>())
+                    .Count(id => BlackwingMonsters.Concat(new[] { DarkArmedDragon }).Any(dark => CardIdentity.Same(id, dark)));
+                return darksInGrave >= 2 ? 4 : 2;
+            }
+            return base.HandValue(card);
+        }
 
         protected override bool CanUseMonsterEffect(int cardId, Board board, List<DynamicCard> monsterTargets) => cardId switch
         {
@@ -178,11 +190,24 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             int whirlwindsUp = board.OwnSpells.Count(card => card.IsCode(BlackWhirlwind) && card.IsFaceup());
             int missingSearches = SearchPriority.Take(2).Count(id => !hand.Any(card => card.IsCode(id)));
             var summonable = state.SummonableCards ?? Array.Empty<DynamicCard>();
-            bool hasNormalSummon = summonable.Any(card => card.IsCode(ShuraTheBlueFlame, BoraTheSpear, SiroccoTheDawn, BlizzardTheFarNorth));
+            int enemyBestPower = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.GetRealPower()).DefaultIfEmpty(0).Max();
+            bool blizzardHasTarget = board.Graveyard.Any(card => card.IsCode(BlizzardTargets));
+
+            // Only summons that will actually happen below: Sirocco without tributes, Blizzard with a revive target.
+            // Otherwise Black Whirlwind goes up and nothing follows (Blizzard alone did that, 2026-10-15).
+            bool hasNormalSummon = summonable.Any(card =>
+                card.IsCode(ShuraTheBlueFlame, BoraTheSpear) ||
+                (card.IsCode(SiroccoTheDawn) && ownMonsters.Count == 0) ||
+                (card.IsCode(BlizzardTheFarNorth) && blizzardHasTarget));
+
+            // Blizzard without a revive target is still a 1300 body: better than passing with an empty board,
+            // as long as nothing face-up on their side beats it.
+            bool blizzardAsBody = ownMonsters.Count == 0 && !blizzardHasTarget && enemyBestPower < 1300 &&
+                TryGetSummonable(state, BlizzardTheFarNorth, out _);
 
             // Kalut normally stays in hand, but with an empty board and no other monster to play
             // it's better as a body (and with Black Whirlwind, a 1400 summon still searches Gale).
-            bool kalutIsOnlyPlay = ownMonsters.Count == 0 && !hasNormalSummon &&
+            bool kalutIsOnlyPlay = ownMonsters.Count == 0 && !hasNormalSummon && !blizzardAsBody &&
                 !TryGetMonsterSettable(state, VayuTheEmblemOfHonor, out _) &&
                 TryGetSummonable(state, KalutTheMoonShadow, out _);
 
@@ -200,8 +225,6 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             }
 
             // Normal summon.
-            int enemyBestPower = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.GetRealPower()).DefaultIfEmpty(0).Max();
-            bool blizzardHasTarget = board.Graveyard.Any(card => card.IsCode(BlizzardTargets));
             if (blizzardHasTarget && TryGetSummonable(state, BlizzardTheFarNorth, out var blizzard))
                 return blizzard.NormalSummon();
 
@@ -255,6 +278,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
                 Log($"Normal summon: {cardId}");
                 return card.NormalSummon();
+            }
+
+            if (blizzardAsBody && TryGetSummonable(state, BlizzardTheFarNorth, out var blizzardBody))
+            {
+                Log("Blizzard as a body: no revive target, but the board is empty");
+                return blizzardBody.NormalSummon();
             }
 
             if (TryGetMonsterSettable(state, VayuTheEmblemOfHonor, out var vayu))
@@ -339,11 +368,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
             // Shura's floater (special summon from deck, effects negated): a tuner to attack again and synchro in Main 2.
             // Gale (level 3, 1300 ATK) makes a level 7 with Shura; Vayu (level 1) a level 5.
-            if (state.SelectionHint == (int)DHint.SPSUMMON && allFromDeck)
+            // The hint doesn't always come as SPSUMMON: a pick from the deck during the battle can only be Shura
+            // (Black Whirlwind triggers on Normal Summons). Without this it fell through to the search and took Kalut.
+            var phase = (DuelPhase)CurrentHeader.CurrentPhase;
+            bool inBattle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep or DuelPhase.Damage or DuelPhase.DamageCal or DuelPhase.Battle;
+            if ((state.SelectionHint == (int)DHint.SPSUMMON || inBattle) && allFromDeck)
             {
                 var floater = PreferCardSelection(state, GaleTheWhirlwind) ?? PreferCardSelection(state, VayuTheEmblemOfHonor);
                 if (floater != null)
+                {
+                    Log($"Shura's floater (hint {state.SelectionHint}): {selectable[floater[0]].ID}");
                     return floater;
+                }
             }
 
             // Searches from the deck (Black Whirlwind): Gale first, then Kalut, skipping what's already in hand.

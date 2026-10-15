@@ -203,6 +203,10 @@ namespace BotTest.Game.AI.Brains
                 return -1000;
             if ((card.Type & TokenType) != 0)
                 return -500;
+            // On our Main Phase 1, a monster in defense (Blizzard's revive, a set monster) won't attack this turn:
+            // it's the material to give up, so the attack-position one still swings.
+            if (IsBotTurn && (DuelPhase)CurrentHeader.CurrentPhase == DuelPhase.Main1 && card.IsDefense())
+                return card.Attack - 1500;
             return card.Attack;
         }
 
@@ -264,6 +268,8 @@ namespace BotTest.Game.AI.Brains
         protected void Log(string message) => ConsoleUtils.PrintColored($"{LogTag} {message}");
 
         // For checks that run on every decision: only log when the outcome changes.
+        private string? _lastHandLog;
+
         protected void LogOnChange(string message)
         {
             if (message != _lastRepeatedLog)
@@ -296,6 +302,12 @@ namespace BotTest.Game.AI.Brains
             var state = context.StateData;
 
             var board = await BuildBoardAsync();
+
+            // The hand never shows up in the logs otherwise, and "why didn't it play anything" needs it.
+            string handLog = $"Hand (turn {CurrentHeader.CurrentTurn}): {string.Join(",", board.Hand.Select(card => card.ID))}";
+            if (handLog != _lastHandLog)
+                Log(handLog);
+            _lastHandLog = handLog;
 
             var response = await DecideGenericOpeningAsync(state, board);
             if (response.HasValue)
@@ -1216,7 +1228,9 @@ namespace BotTest.Game.AI.Brains
                 return false;
 
             var enemySide = CurrentField.EnemySide;
-            DynamicCard? attacker = enemySide.HasBattlingMonster ? enemySide.BattlingMonster : null;
+            // The battle info outlives the attacker: after Prison banishes it, the next chain still reports it.
+            DynamicCard? attacker = enemySide.HasBattlingMonster && StillOnField(enemySide.BattlingMonster, enemyMonsters)
+                ? enemySide.BattlingMonster : null;
 
             // We already answered this chain (e.g. Royal Oppression on their summon): don't pile on more cards
             // unless something of ours is about to die in battle.
@@ -1412,6 +1426,13 @@ namespace BotTest.Game.AI.Brains
             return judged.Any(monster => monster.IsCode(StardustDragon) || monster.Attack >= 2400);
         }
 
+        // Whether a monster from the battle info is still on their field (same zone, same card). Prison or Icarus
+        // can remove the attacker while the API keeps reporting it as battling (2026-10-15: Icarus tributed Gale
+        // "to save it" from a Stardust already banished, and only hit two Fluff Tokens).
+        private static bool StillOnField(DynamicCard monster, List<DynamicCard> enemyMonsters) =>
+            enemyMonsters.Any(card => card.CurrentCoordinates.Sequence == monster.CurrentCoordinates.Sequence &&
+                CardIdentity.Same(card.ID, monster.ID));
+
         // Icarus is a 2-for-1, not a reflex. Use it when:
         //  - one of our monsters is about to die in battle anyway (tribute it in response), or
         //  - we're behind (more cards on their side, or a monster we can't beat), or
@@ -1424,7 +1445,7 @@ namespace BotTest.Game.AI.Brains
 
             var ownSide = CurrentField.OwnSide;
             var enemySide = CurrentField.EnemySide;
-            if (ownSide.HasBattlingMonster && enemySide.HasBattlingMonster &&
+            if (ownSide.HasBattlingMonster && enemySide.HasBattlingMonster && StillOnField(enemySide.BattlingMonster, enemyMonsters) &&
                 enemySide.BattlingMonster.Attack >= ownSide.BattlingMonster.GetRealPower())
                 return true;
 
@@ -2030,6 +2051,15 @@ namespace BotTest.Game.AI.Brains
             // Debris Dragon revives from their GY: with nothing there it's a dead card.
             if (card.IsCode(DebrisDragon) && (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).Length == 0)
                 score -= priority;
+
+            // With nothing in their GY, GY-based plays are slow: the searchers that start the engine come first
+            // (Gearframe, Stratos). Machina Force is discard fodder to revive Machina Fortress from the GY:
+            // without a Fortress there it does little this turn.
+            var theirGrave = CurrentField.EnemySide.Grave ?? Array.Empty<int>();
+            if (theirGrave.Length == 0 && card.IsCode(Searchers))
+                score += 1500;
+            if (card.IsCode(MachinaForce) && !theirGrave.Any(id => CardIdentity.Same(id, MachinaFortress)))
+                score -= 1500;
             if (ThreatBonus.TryGetValue(Key(card), out int threat))
                 score += threat;
             score += Math.Max(card.Attack, 0) / 10;
