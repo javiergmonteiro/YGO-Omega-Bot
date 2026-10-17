@@ -162,7 +162,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             GaleTheWhirlwind => monsterTargets.Any(card => IsWorthHalving(card)),
             // Bounce something hard to answer, paying with a card we don't need.
             BrionacDragonOfTheIceBarrier => board.Hand.Any(card => HandValue(card) <= 2) &&
-                (monsterTargets.Any(card => ThreatScore(card) >= 2500) || board.EnemySpells.Any(card => card.IsFaceup())),
+                (monsterTargets.Any(card => ThreatScore(card) >= 2500) || board.EnemySpells.Any(card => card.IsFaceup()) ||
+                 // or only their set backrow is in the way (same condition that picks Brionac over Goyo)
+                 (board.EnemySpells.Any(card => !card.IsFaceup()) && monsterTargets.All(card => !card.IsFaceup() || card.GetRealPower() < 1900))),
             DarkArmedDragon => monsterTargets.Count + board.EnemySpells.Count > 0,
             DarkEndDragon or BlackwingArmorMaster => monsterTargets.Count > 0,
             SiroccoTheDawn => board.IsMain1 && !_synchroAvailable && MarkSiroccoUsed(SiroccoPumpTarget(board.OwnMonsters, board.EnemyMonsters)),

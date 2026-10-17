@@ -424,7 +424,12 @@ namespace BotTest.Game.AI.Brains
             // Only monsters that punish being destroyed in battle (Machina Fortress): a fearless attacker may go to defense.
             bool onlyPunishers = board.EnemyMonsters.Count > 0 && board.EnemyMonsters.All(card => card.IsFaceup() && card.IsCode(PunishesBattleDestruction));
             int strongestEnemyAttack = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.Attack).DefaultIfEmpty(0).Max();
+            // Main Phase 1 with a battle ahead and our attackers' ATK reaching their LP: nobody goes to defense first
+            // (2026-10-17: Bora went to defense facing Ancient Fairy Dragon with them at 1100 and a 0-DEF token to pierce).
+            bool lethalReach = IsBotTurn && board.IsMain1 && state.CanBattlePhase &&
+                board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack()).Sum(card => card.Attack) >= CurrentField.EnemySide.LifePoints;
             filtered.ReposableCards = (state.ReposableCards ?? Array.Empty<DynamicCard>())
+                .Where(card => !(lethalReach && card.IsFaceup() && card.IsAttack()))
                 .Where(card => !(card.IsCode(FearlessAttackers) && !IsNegated(card) && card.IsAttack() && !onlyPunishers))
                 // A face-up defender doesn't switch to attack just to be exposed: if something of theirs beats it and it
                 // has no real monster to beat (tokens don't count), it stays in defense.
@@ -671,7 +676,7 @@ namespace BotTest.Game.AI.Brains
                     return false;
                 }
 
-                Log($"Synchro into Royal Oppression as bait (they have {enemyLifePoints} LP)");
+                LogOnChange($"Synchro into Royal Oppression as bait (they have {enemyLifePoints} LP)");
             }
 
             var options = (state.SpecialSummonableCards ?? Array.Empty<DynamicCard>())
@@ -765,8 +770,14 @@ namespace BotTest.Game.AI.Brains
                     // Bounce what we can't otherwise answer, paying with a card we don't need.
                     bool hardThreat = faceUp.Any(card => card.IsCode(PunishesMonsterTargeting) || ThreatScore(card) >= 2500) ||
                         board.EnemySpells.Any(card => card.IsFaceup());
+                    // Only their set backrow stands in the way (their monsters are small): bounce a set card rather than
+                    // make a Goyo that walks into it (2026-10-17: Goyo over Brionac into a set Mirror Force).
+                    bool onlyBackrow = !hardThreat && board.EnemySpells.Any(card => !card.IsFaceup()) &&
+                        faceUp.All(card => card.GetRealPower() < 1900);
                     if (hardThreat && board.Hand.Any(card => HandValue(card) <= 2))
                         score += 45;
+                    else if (onlyBackrow && canAttackThisTurn && board.Hand.Any(card => HandValue(card) <= 2))
+                        score += 60;
                     break;
 
                 case StardustDragon:
@@ -1019,9 +1030,13 @@ namespace BotTest.Game.AI.Brains
             // weakest attacker first (a smaller token, and the rest can still react after it).
             var enemySideNow = CurrentField.EnemySide;
             bool enemyEmpty = (await GetEnemyMonsterCardsAsync()).Count == 0 && (await GetEnemySpellCardsAsync()).Count == 0;
-            bool gorzPossible = (enemySideNow.Hand ?? Array.Empty<int>()).Length > 0 &&
-                (_revealedEnemyHand.Contains(GorzTheEmissaryOfDarkness) ||
-                 CardCounter.OpponentCopiesLeft(GorzTheEmissaryOfDarkness, enemySideNow.Grave, enemySideNow.Banish, Array.Empty<int>()) > 0);
+            // Only when we know they play it: seen in their hand, or a copy already seen in public this duel
+            // (2026-10-17: Dark Armed Dragon skipped two direct attacks into an empty field on a Gorz they never had).
+            bool gorzSeen = StillInRevealedHand(GorzTheEmissaryOfDarkness) ||
+                (enemySideNow.Grave ?? Array.Empty<int>()).Concat(enemySideNow.Banish ?? Array.Empty<int>())
+                    .Any(id => CardIdentity.Same(id, GorzTheEmissaryOfDarkness));
+            bool gorzPossible = (enemySideNow.Hand ?? Array.Empty<int>()).Length > 0 && gorzSeen &&
+                CardCounter.OpponentCopiesLeft(GorzTheEmissaryOfDarkness, enemySideNow.Grave, enemySideNow.Banish, Array.Empty<int>()) > 0;
             // Only the first listed monster can attack, so we can't pick the weakest: if the first isn't the weakest
             // and nothing set answers Gorz and its token (Icarus, Mirror Force, Prison, Book of Moon), stay back
             // rather than hand them a big token. An attack that wins the duel goes anyway.
@@ -1509,7 +1524,7 @@ namespace BotTest.Game.AI.Brains
 
             return card.ID switch
             {
-                DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints),
+                DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints) && !StrongerAttackerWaiting(attacker, enemyMonsters, lifePoints),
                 MirrorForce => attacker.HasValue && (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
@@ -1534,7 +1549,13 @@ namespace BotTest.Game.AI.Brains
 
             if (header.LastChainPlayer != ChainTracker.Opponent && header.LastSummonPlayer == ChainTracker.Opponent)
             {
-                var special = NewEnemyMonsters(enemyMonsters).FirstOrDefault(m => m.IsExtraCard() || Named(m, SelfSpecialSummoners));
+                // A monster of theirs left the field in the same window: that was a tribute, so a monster that can also be
+                // normal summoned (Machina Fortress, Cyber Dragon...) came by tribute summon (2026-10-17: flipped on a
+                // Fortress tributing two tokens, then they paid 800 to negate our summons).
+                var nowKeys = enemyMonsters.Select(ZoneKey).ToHashSet();
+                bool tributed = _seenEnemyMonsters.Any(key => !nowKeys.Contains(key));
+                var special = NewEnemyMonsters(enemyMonsters).FirstOrDefault(m => m.IsExtraCard() ||
+                    (Named(m, SelfSpecialSummoners) && !(tributed && Named(m, AlsoTributeSummoned))));
                 return special.ID != 0 ? $"special summon of {special.ID}" : null;
             }
 
@@ -1660,6 +1681,17 @@ namespace BotTest.Game.AI.Brains
                 return lethal;
 
             return lethal || attackingCard.Attack >= 1900;
+        }
+
+        // A stronger monster of theirs in attack position that hasn't attacked yet: Prison waits for it unless this hit
+        // is lethal (2026-10-17: Prison took Ancient Fairy Dragon, 2100, and Machina Fortress hit for 2500 right after).
+        private static bool StrongerAttackerWaiting(DynamicCard? attacker, List<DynamicCard> enemyMonsters, int lifePoints)
+        {
+            if (!attacker.HasValue || attacker.Value.Attack >= lifePoints || attacker.Value.IsCode(StardustDragon))
+                return false;
+            var current = attacker.Value;
+            return enemyMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked &&
+                !SameCard(card, current) && card.Attack > current.Attack);
         }
 
         // The monster being summoned has an effect that fires on summon (Black Rose wiping the field, a Monarch,

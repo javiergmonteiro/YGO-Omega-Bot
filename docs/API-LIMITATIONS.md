@@ -64,6 +64,7 @@ Cada entrada tiene:
 - **Cartas boca abajo del rival:** en los datos de selección llegan con ID 0 o -3. Las cartas enemigas se identifican por **controller + sequence**, nunca por ID; eso incluye `_forcedAttackTarget` en `ATTACKTARGET`. Ya pasó: Icarus apuntó al propio Solemn del bot por comparar por ID.
 - **Hints de selección:** las reglas de objetivos tienen que cubrir todos los que aparecen: `FACEUP`, `CONTROL`, `TARGET`, `DESTROY`, `REMOVE`, `TOGRAVE`, `RTOHAND`, `POSCHANGE`, `TODECK`, `DISCARD`, `RELEASE`, `TRIBUTE`, `SMATERIAL`, `ATTACKTARGET`, `SPSUMMON`, `ATOHAND`. Ya pasó: Gale y Brain Control apuntaron a tokens de 0 ATK porque no se manejaba `FACEUP`/`CONTROL`.
 - **Origen de la cadena:** Royal Oppression no puede saber solo con el header si la acción es propia. Para eso están `ChainTracker.Source(header)` y `OwnActionPendingNow`, sellados con turno y fase para que no queden flags viejos.
+- **Tipo de invocación:** el header solo trae `LastSummonPlayer`, no si fue normal, por tributo o especial. Se deduce del campo: un monstruo del rival que desaparece en la misma ventana indica tributo (`SpecialSummonUnderway`). Ya pasó: Royal Oppression se dio vuelta ante una Machina Fortress invocada por tributo.
 
 ---
 

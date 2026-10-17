@@ -68,7 +68,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 - **Catastor:** contra un no-DARK de 2200 o más.
 - **Black Rose:** solo si vamos claramente atrás (el rival tiene 2 cartas más que nosotros en el campo) y no hay Stardust que la niegue. Si no, nunca.
 - **Magical Android:** con 4000 de vida o menos.
-- **Brionac:** contra algo difícil de sacar, pagando con una carta que no necesitamos.
+- **Brionac:** contra algo difícil de sacar, pagando con una carta que no necesitamos. También cuando lo único que estorba es el backrow seteado del rival (sus monstruos tienen menos de 1900), antes que un Goyo que se come la trampa.
 - **Stardust:** contra 2 o más cartas seteadas.
 
 **Materiales: entrega primero lo que menos sirve.**
@@ -103,6 +103,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 - Los que destruyen no-DARK en batalla se quedan en ataque si hay no-DARK enfrente.
 - Uno boca abajo débil (menos de 1500) no se da vuelta solo para pegarle a uno boca abajo, salvo que tenga Kalut en la mano.
 - Con Kalut en la mano, un monstruo que con +1400 le gana al más fuerte del rival se queda en ataque.
+- En Main 1 con batalla por delante, si el ATK de nuestros monstruos en ataque suma los LP del rival o más, ninguno pasa a defensa (puede haber lethal, por ejemplo Bora perforando un token).
 
 **Al invocar:** los indestructibles en batalla van en defensa si el rival solo tiene Fortress, o si ese turno no hay batalla (turno 1 o Main 2). El resto lo decide el framework.
 
@@ -287,6 +288,7 @@ Código: `ShouldUseIcarus`, `FindBlackRosePair`, `DoomedByTheirRemovalAsync`, `S
 - Si hay un ataque letal (ATK mayor o igual a nuestros LP): siempre.
 - Si hay un Stardust activo en su campo (otro que no ataca): solo con lethal. La Prison se guarda para Stardust.
 - Si no hay Stardust: ataca con 1900 ATK o más, o lethal.
+- Si el rival tiene otro monstruo en ataque más fuerte que todavía no atacó, la Prison lo espera (salvo que este golpe sea letal).
 - Sin atacante declarado, nunca.
 - No la bloquea el Stardust (no es de destrucción), pero sí Tytannial (apunta).
 
@@ -298,7 +300,7 @@ Código: `ShouldUseIcarus`, `FindBlackRosePair`, `DoomedByTheirRemovalAsync`, `S
 
 **Setear:** tercera de la lista.
 
-Código: `ShouldUsePrison`, `DecideBattleCmdCoreAsync`, `StillInRevealedHand`
+Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync`, `StillInRevealedHand`
 
 ### Mirror Force
 
@@ -331,6 +333,7 @@ Código: `ShouldChain` (bloque de Gladiator Beasts y tabla final)
 - Solo en el turno del rival y en una cadena o invocación del rival.
 - La API no dice qué carta empezó la cadena, así que el bot lo deduce de su campo:
   - **Ventana de invocación** (sin cadena del rival) con un monstruo nuevo que solo entra por invocación especial: del Extra Deck, o de los que se invocan solos desde la mano (Quickdraw, Cyber Dragon, Gorz, Tragoedia, Cyber Valley, Chaos Sorcerer, BLS, DAD, Judgment Dragon, Machina Fortress).
+  - La API no dice si fue normal o especial. Si en esa misma ventana un monstruo del rival dejó el campo, fue un tributo: Machina Fortress, Cyber Dragon, Gorz, Tragoedia y Quickdraw se toman como invocación por tributo y no se da vuelta.
   - **Cadena del rival** mientras controla un monstruo cuyo efecto invoca (Lonefire, Debris Dragon, Dandylion, Plaguespreader, Gladiator Beasts, Shura, Blizzard), o con una magia/trampa boca arriba que invoca (Monster Reborn, Call of the Haunted, Premature Burial, Scapegoat, Future Fusion).
 - Si no, se queda boca abajo. Cada vez que se la ofrece, el log muestra la ventana (LastChainPlayer, LastSummonPlayer, monstruos nuevos) y la decisión, para revisar casos raros.
 - ⚠ Es una deducción: si el rival tiene un Lonefire en el campo y activa otra cosa, igual se da vuelta.
@@ -352,7 +355,7 @@ Código: `ShouldChain` (bloque de Gladiator Beasts y tabla final)
 
 **Setear:** sexta de la lista.
 
-Código: `ShouldUseRoyalOppression`, `TrySynchroSummon`
+Código: `ShouldUseRoyalOppression`, `SpecialSummonUnderway`, `TrySynchroSummon`
 
 ### Trap Dustshoot
 
@@ -558,8 +561,8 @@ Código: `BookOfMoonPriority`, `UseBookOfMoonOnAttacker`, `DecideGenericAttackAs
 ### Gorz, the Emissary of Darkness
 
 **Si el rival no tiene cartas en campo y pudiera tener Gorz, el bot cuida el ataque.**
-- Gorz posible = el rival tiene cartas en la mano y (se vio Gorz en su mano revelada, o según la banlist aún queda una copia que no vimos usada).
-- ⚠ La parte "se vio Gorz" usa la mano revelada sin chequear que haya caducado: una Gorz vista hace turnos aún cuenta. (la parte de la banlist sí chequea copias usadas)
+- Gorz posible = el rival tiene cartas en la mano, sabemos que juega Gorz (se vio en su mano revelada y no caducó, o ya vimos una copia en su GY o desterrada este duelo) y le quedan copias según la banlist.
+- Sin evidencia de que juegue Gorz, se ataca normal.
 - Con campo vacío (ni monstruos ni magias/trampas) y un ataque directo posible: ataca el primero si es el más débil de los que pueden atacar, si hay una respuesta seteada (Icarus, Mirror Force, Dimensional Prison, Book of Moon) o si el golpe es letal. Si no, se queda sin atacar (va a Main 2/End).
 - Razón: el token de Gorz recibe el daño de nuestro ataque; mejor un token chico.
 - Dustshoot: prioridad máxima (4000, más 2000 con nuestros atacantes en juego).

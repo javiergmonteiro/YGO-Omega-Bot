@@ -92,6 +92,12 @@ namespace BotTest.Game.AI.Knowledge
             "Chaos Sorcerer", "Black Luster Soldier", "Dark Armed Dragon", "Judgment Dragon", "Machina Fortress",
         };
 
+        // Self special summoners that can also be tribute summoned: a tribute in the same window means a normal summon.
+        public static readonly string[] AlsoTributeSummoned =
+        {
+            "Machina Fortress", "Cyber Dragon", "Gorz the Emissary of Darkness", "Tragoedia", "Quickdraw Synchron",
+        };
+
         // monsters whose effect special summons (the chain they start is what it negates),
         public static readonly string[] SpecialSummonEffectMonsters =
         {
