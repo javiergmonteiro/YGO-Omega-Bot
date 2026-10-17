@@ -11,6 +11,12 @@ Bot for YGO Omega (Edison format, Blackwings deck) built on duelbotwrapper. The 
 - Javier prefers few, targeted rules (gated by matchup or situation) over broad changes that can break other plays.
 - Compare cards with `IsCode` or `CardIdentity`, never with raw IDs, because errata versions have different IDs.
 
+## Keeping cost down (Javier's weekly budget matters)
+- **One session per round.** Javier plays 3–4 games, opens a new session and asks for a review. Do the round (summaries → fixes → build → pages → commit) and stop; suggest a fresh session for anything unrelated.
+- **Logs are summarized by Sonnet only:** one `log-reviewer` agent per new folder. Never fan out Opus agents over logs. Read only the `resumen.md` files.
+- **Read narrowly:** find the rule in `docs/reglas/*.md` (its `Código:` line names the method), grep for that method and read only it. Never read whole rule files.
+- Routine rounds can run on Sonnet as the main model; Opus is for design work (new deck, cross-cutting strategy).
+
 ## Rules pages (docs/reglas/*.md → artifacts)
 - `docs/reglas/edison.md` (generic Edison brain) and `docs/reglas/<deck>.md` describe every bot decision in plain Spanish for Javier. Read them first to know the intent of a rule before reading code.
   - Each `###` heading is one entry (a card or rule). A deck file overrides a generic entry by using the same title (parenthetical notes ignored) under "Cambios sobre el Edison Brain"; the deck page shows both side by side.
