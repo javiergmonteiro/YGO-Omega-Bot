@@ -51,8 +51,8 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 **Hace synchro en su turno**, o en cualquier momento si controla un monstruo robado (que sirve de material).
 
 **No hace synchro con Royal Oppression boca arriba** (de cualquiera de los dos): el rival paga 800, lo niega y perdemos los dos materiales.
-- Excepción, como carnada: si al rival le quedan 3000 de vida o menos, o un 25% de las veces.
-- ⚠ El 25% se sortea en cada decisión, no una vez por turno, así que en la práctica pasa más seguido.
+- Excepción, como carnada: si al rival le quedan 3000 de vida o menos, o en un 25% de los turnos (se sortea una vez por turno).
+- Lo mismo vale para invocaciones especiales desde la mano y efectos que invocan (ver Royal Oppression).
 
 **Espera a la Main 2 para que los materiales ataquen primero.**
 - Cuándo: es nuestra Main 1 con batalla disponible, el rival no tiene cartas seteadas, y nuestro atacante más débil le gana a cada monstruo suyo.
@@ -327,9 +327,13 @@ Código: `ShouldChain` (bloque de Gladiator Beasts y tabla final)
 
 ### Royal Oppression
 
-**Boca abajo: se activa cuando el rival empieza algo en su turno.**
-- Solo si no es nuestro turno y la fuente de la cadena es el rival.
-- ⚠ El comentario del código dice "hasta que vaya por una invocación especial" pero la condición real es cualquier cadena que empiece el rival.
+**Boca abajo: se da vuelta solo cuando el rival está por invocar de modo especial.** Una vez boca arriba, el rival también puede pagar 800 para negar *nuestras* invocaciones, así que darla vuelta sin negar nada es regalársela.
+- Solo en el turno del rival y en una cadena o invocación del rival.
+- La API no dice qué carta empezó la cadena, así que el bot lo deduce de su campo:
+  - **Ventana de invocación** (sin cadena del rival) con un monstruo nuevo que solo entra por invocación especial: del Extra Deck, o de los que se invocan solos desde la mano (Quickdraw, Cyber Dragon, Gorz, Tragoedia, Cyber Valley, Chaos Sorcerer, BLS, DAD, Judgment Dragon, Machina Fortress).
+  - **Cadena del rival** mientras controla un monstruo cuyo efecto invoca (Lonefire, Debris Dragon, Dandylion, Plaguespreader, Gladiator Beasts, Shura, Blizzard), o con una magia/trampa boca arriba que invoca (Monster Reborn, Call of the Haunted, Premature Burial, Scapegoat, Future Fusion).
+- Si no, se queda boca abajo. Cada vez que se la ofrece, el log muestra la ventana (LastChainPlayer, LastSummonPlayer, monstruos nuevos) y la decisión, para revisar casos raros.
+- ⚠ Es una deducción: si el rival tiene un Lonefire en el campo y activa otra cosa, igual se da vuelta.
 - Con el Heavy Storm del rival resolviéndose, no se encadena (le quita la cadena a Solemn).
 
 **Boca arriba: niega lo del rival, no lo propio, y no lo que no puede negar.**
@@ -340,8 +344,11 @@ Código: `ShouldChain` (bloque de Gladiator Beasts y tabla final)
 
 **Sinergia con el Stardust:** tener Oppression seteada o boca arriba (con más de 800 LP) levanta el bloqueo de destrucción vs Stardust, porque penaliza su vuelta al campo.
 
-**Si hay una Oppression boca arriba (nuestra o suya) y queremos hacer una sincro:** si ellos tienen más de 800 LP, la sincro solo se hace como carnada: siempre si ellos tienen 3000 LP o menos, o el 25% de las veces (azar) si tienen más. Si no, no se invoca la sincro (se perderían los dos materiales).
-- ⚠ El código supone que "ellos" pagan los 800: la regla se calcula con los LP del rival aunque la Oppression sea nuestra. (no está claro en el código)
+**Con una Oppression boca arriba (nuestra o suya), cualquiera puede pagar 800 para negar una invocación especial, también el rival con la nuestra.** Por eso, mientras el rival pueda pagar:
+- **Sincro:** solo como carnada: siempre si el rival tiene 3000 de vida o menos, o el 25% de los turnos (se sortea una vez por turno). Si no, no se invoca (se perderían los dos materiales).
+- **Invocaciones especiales desde la mano (DAD, Bora, Gale…):** no se hacen si el rival tiene más de 3000 de vida.
+- **Efectos que invocan (revive de Blizzard, floater de Shura):** se responde "no" al efecto si el rival tiene más de 3000 de vida, porque Oppression lo niega y destruye al monstruo.
+- Pasó el 2026-10-17: el rival pagó dos veces con la Oppression del bot y destruyó a DAD y a Blizzard.
 
 **Setear:** sexta de la lista.
 
@@ -625,7 +632,7 @@ Código: `ThreatScore`, `GetPriorityEnemyMonster`, `RemovalValue`
 
 ### Royal Oppression del rival (boca arriba)
 
-- Como ya se explicó: antes de una sincro, si hay Oppression boca arriba y ellos tienen más de 800 LP, solo se invoca la sincro como carnada (siempre con 3000 LP o menos, 25% del resto).
+- Como ya se explicó en Royal Oppression: con una Oppression boca arriba de cualquiera de los dos, el bot frena sus invocaciones especiales mientras el rival pueda pagar.
 - El efecto de Vayu desde el GY no se puede negar con Oppression: el bot no la gasta ahí (la detecta porque Vayu se destierra solo).
 
 Código: `TrySynchroSummon`, `Chain.OpponentJustUsedUnnegatable`

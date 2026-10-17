@@ -48,6 +48,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         // Turn Sirocco's effect was used (no synchro after it), and whether a synchro was available at the last idle.
         private int _siroccoUsedTurn = -1;
         private bool _siroccoTargetPending;
+        private int _siroccoTarget;
         private bool _synchroAvailable;
 
         // The battle Kalut was last used in (one Kalut per battle).
@@ -68,6 +69,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             base.OnNewDuel();
             _siroccoUsedTurn = -1;
             _siroccoTargetPending = false;
+            _siroccoTarget = 0;
             _kalutBattle = null;
             _enemyMonstersNow = null;
             _ownMonstersNow = null;
@@ -120,6 +122,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
         protected override bool CanBeBoosted(DynamicCard card) => card.IsCode(BlackwingMonsters);
 
+        // Blizzard's revive and Shura's floater special summon: Royal Oppression negates them and destroys the monster.
+        protected override int[] OurSpecialSummonEffects { get; } = { BlizzardTheFarNorth, ShuraTheBlueFlame };
+
         // A stolen monster becomes synchro material with Gale (special from hand, needs a Blackwing on field)
         // or Blizzard (normal summon), or the tribute for Sirocco.
         protected override bool CanUseStolenMonster(DynamicCard target, IdleCmdData state, Board board)
@@ -160,7 +165,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                 (monsterTargets.Any(card => ThreatScore(card) >= 2500) || board.EnemySpells.Any(card => card.IsFaceup())),
             DarkArmedDragon => monsterTargets.Count + board.EnemySpells.Count > 0,
             DarkEndDragon or BlackwingArmorMaster => monsterTargets.Count > 0,
-            SiroccoTheDawn => board.IsMain1 && !_synchroAvailable && IsSiroccoBoostWorthIt(board.OwnMonsters, board.EnemyMonsters) && MarkSiroccoUsed(),
+            SiroccoTheDawn => board.IsMain1 && !_synchroAvailable && MarkSiroccoUsed(SiroccoPumpTarget(board.OwnMonsters, board.EnemyMonsters)),
             _ => true
         };
 
@@ -182,6 +187,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                 {
                     if (ShouldAvoidOverextending(board, card))
                         continue;
+                    if (OppressionStopsOurSpecialSummons(board))
+                    {
+                        LogOnChange($"Not special summoning {cardId}: Royal Oppression is face-up and they can pay to negate it");
+                        continue;
+                    }
                     Log($"Special summon from hand: {cardId}");
                     return card.SpecialSummon();
                 }
@@ -214,7 +224,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             int missingSearches = SearchPriority.Take(2).Count(id => !hand.Any(card => card.IsCode(id)));
             var summonable = state.SummonableCards ?? Array.Empty<DynamicCard>();
             int enemyBestPower = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.GetRealPower()).DefaultIfEmpty(0).Max();
-            bool blizzardHasTarget = board.Graveyard.Any(card => card.IsCode(BlizzardTargets));
+            // Blizzard's revive is a special summon: with Royal Oppression face-up it would only get Blizzard destroyed.
+            bool blizzardHasTarget = board.Graveyard.Any(card => card.IsCode(BlizzardTargets)) && !OppressionStopsOurSpecialSummons(board);
 
             // Only summons that will actually happen below: Sirocco without tributes, Blizzard with a revive target.
             // Otherwise Black Whirlwind goes up and nothing follows (Blizzard alone did that, 2026-10-15).
@@ -371,14 +382,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
             bool allFromGrave = selectable.All(card => card.CurrentCoordinates.Location == (byte)CardLocation.Grave);
 
-            // Sirocco's target (our own monster): Shura, whose battle-destroy effect gets the most out of the pump.
+            // Sirocco's target (our own monster): the one chosen when deciding (Bora to pierce, or Shura, whose
+            // battle-destroy effect gets the most out of the pump).
             if (_siroccoTargetPending && selectable.All(card => card.CurrentCoordinates.Controller == ChainTracker.Bot))
             {
                 _siroccoTargetPending = false;
-                var pick = PreferCardSelection(state, ShuraTheBlueFlame);
+                var pick = PreferCardSelection(state, _siroccoTarget) ?? PreferCardSelection(state, ShuraTheBlueFlame);
                 if (pick != null)
                 {
-                    Log("Sirocco's pump on Shura");
+                    Log($"Sirocco's pump on {selectable[pick[0]].ID}");
                     return pick;
                 }
                 var strongest = selectable.Select((card, index) => new { card, index }).OrderByDescending(x => x.card.Attack).First();
@@ -464,26 +476,46 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         }
 
         // Sirocco: one Blackwing gains the ATK of all our other Blackwings, but only it can attack this turn.
-        // Pointless alone; worth it only when the pumped monster breaks something none of ours beats on its own.
-        private static bool IsSiroccoBoostWorthIt(List<DynamicCard> ownMonsters, List<DynamicCard> enemyMonsters)
+        // Pointless alone. Worth it when:
+        //  - the pumped monster breaks something none of ours beats on its own (pump Shura if possible), or
+        //  - Bora's piercing does more alone than everyone attacking: every monster of theirs is in defense and there
+        //    are enough of them to block each attacker, so only Bora's piercing deals damage anyway
+        //    (2026-10-17: Bora 1700 + Sirocco 2000 into two 0-DEF tokens dealt 1700; pumped Bora pierces for 3700).
+        // Returns the monster to pump, or 0 when it isn't worth it.
+        private static int SiroccoPumpTarget(List<DynamicCard> ownMonsters, List<DynamicCard> enemyMonsters)
         {
-            var attackers = ownMonsters.Where(card => card.IsCode(BlackwingMonsters) && card.IsFaceup() && card.IsAttack()).ToList();
+            var attackers = ownMonsters.Where(card => card.IsCode(BlackwingMonsters) && card.IsFaceup() && card.IsAttack() && !card.Attacked).ToList();
             if (attackers.Count < 2)
-                return false;
+                return 0;
 
             int bestSingle = attackers.Max(card => card.Attack);
             int pumped = attackers.Sum(card => card.Attack);
-            return enemyMonsters.Any(enemy => enemy.GetRealPower() >= bestSingle && enemy.GetRealPower() < pumped);
+            if (enemyMonsters.Any(enemy => enemy.GetRealPower() >= bestSingle && enemy.GetRealPower() < pumped))
+                return ShuraTheBlueFlame;
+
+            var bora = attackers.FirstOrDefault(card => card.IsCode(BoraTheSpear));
+            bool allDefending = enemyMonsters.Count >= attackers.Count && enemyMonsters.All(enemy => enemy.IsFaceup() && enemy.IsDefense());
+            if (bora.ID != 0 && allDefending)
+            {
+                int lowestDefense = enemyMonsters.Min(enemy => enemy.Defense);
+                if (pumped - lowestDefense > Math.Max(0, bora.Attack - lowestDefense))
+                    return BoraTheSpear;
+            }
+            return 0;
         }
 
         private async Task<bool> ShouldUseSiroccoNowAsync() =>
             IsBotTurn && (DuelPhase)CurrentHeader.CurrentPhase == DuelPhase.Main1 && !_synchroAvailable &&
-            IsSiroccoBoostWorthIt(await GetBotMonsterCardsAsync(), await GetEnemyMonsterCardsAsync()) && MarkSiroccoUsed();
+            MarkSiroccoUsed(SiroccoPumpTarget(await GetBotMonsterCardsAsync(), await GetEnemyMonsterCardsAsync()));
 
-        private bool MarkSiroccoUsed()
+        private bool MarkSiroccoUsed(int target)
         {
+            if (target == 0)
+                return false;
             _siroccoUsedTurn = CurrentHeader.CurrentTurn;
             _siroccoTargetPending = true;
+            _siroccoTarget = target;
+            Log($"Sirocco: pumping {target}");
             return true;
         }
 

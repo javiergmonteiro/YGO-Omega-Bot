@@ -169,6 +169,7 @@ namespace BotTest.Game.AI.Brains
             _moonOnAttack = null;
             _preferredTarget = null;
             _priorityTargets = new();
+            _baitRollTurn = -1;
             _lastHandLog = null;
             Chain.Reset();
         }
@@ -603,6 +604,21 @@ namespace BotTest.Game.AI.Brains
         private static bool SameCard(DynamicCard a, DynamicCard b) =>
             a.ID == b.ID && a.CurrentCoordinates.Sequence == b.CurrentCoordinates.Sequence;
 
+        private int _baitRollTurn = -1;
+        private bool _baitRoll;
+
+        /// <summary>A face-up Royal Oppression on either side: anyone can pay 800 to negate a special summon.</summary>
+        protected static bool OppressionUp(Board board) =>
+            board.OwnSpells.Concat(board.EnemySpells).Any(card => card.IsCode(RoyalOppression) && card.IsFaceup());
+
+        /// <summary>
+        /// Our special summons (from the hand, or by an effect) would just be negated and destroyed: a face-up Royal
+        /// Oppression and the opponent can afford 800 (2026-10-17: they paid twice with our own Oppression and destroyed
+        /// Dark Armed Dragon and Blizzard). Below 3000 LP every payment hurts them, so it's allowed as bait.
+        /// </summary>
+        protected bool OppressionStopsOurSpecialSummons(Board board) =>
+            OppressionUp(board) && CurrentField.EnemySide.LifePoints > 3000;
+
         // The materials can attack first and the synchro still comes in Main Phase 2, when the attacks are safe and
         // each one already wins: nothing set on their side (no Mirror Force / Torrential on the materials) and every
         // monster of theirs is beaten by our weakest attacker (2026-10-16: Armor Master in Main Phase 1
@@ -639,11 +655,16 @@ namespace BotTest.Game.AI.Brains
             // With Royal Oppression face-up (theirs or ours), they can pay 800 to negate the synchro:
             // the materials are already gone, so we'd lose two monsters. (Vayu's GY effect can't be negated.)
             // Sometimes summon anyway as bait: every negation costs them 800, which matters more the lower they are.
-            bool oppressionUp = board.OwnSpells.Concat(board.EnemySpells).Any(card => card.IsCode(RoyalOppression) && card.IsFaceup());
             int enemyLifePoints = CurrentField.EnemySide.LifePoints;
-            if (oppressionUp && enemyLifePoints > 800)
+            if (OppressionUp(board) && enemyLifePoints > 800)
             {
-                bool baitWorthIt = enemyLifePoints <= 3000 || Rng.NextDouble() < 0.25;
+                // Rolled once per turn: re-rolling on every decision made the bait far more likely than 25%.
+                if (_baitRollTurn != CurrentHeader.CurrentTurn)
+                {
+                    _baitRollTurn = CurrentHeader.CurrentTurn;
+                    _baitRoll = Rng.NextDouble() < 0.25;
+                }
+                bool baitWorthIt = enemyLifePoints <= 3000 || _baitRoll;
                 if (!baitWorthIt)
                 {
                     LogOnChange("No synchro summon: Royal Oppression is face-up and they can pay to negate it");
@@ -1356,7 +1377,7 @@ namespace BotTest.Game.AI.Brains
                 return stardustInEnemyGrave;
 
             if (card.IsCode(RoyalOppression))
-                return ShouldUseRoyalOppression(card, lifePoints);
+                return ShouldUseRoyalOppression(card, lifePoints, enemyMonsters, enemySpells);
 
             // Goyo's steal: not on a monster that punishes being destroyed in battle (Machina Fortress).
             if (card.IsCode(StealsOnBattle))
@@ -1499,15 +1520,53 @@ namespace BotTest.Game.AI.Brains
             };
         }
 
+        // Is the opponent special summoning right now, as far as we can tell? The API doesn't say which card started
+        // the chain, so this goes by what's on their field:
+        //  - a summon window (no chain of theirs) with a new monster that only arrives by special summon
+        //    (Extra Deck, or a hand monster that summons itself: Quickdraw, Cyber Dragon, Gorz...);
+        //  - a chain of theirs while they control a monster whose effect special summons (Lonefire, Debris...)
+        //    or just turned face-up a spell/trap that special summons (Monster Reborn, Call of the Haunted...).
+        private string? SpecialSummonUnderway(List<DynamicCard> enemyMonsters, List<DynamicCard> enemySpells)
+        {
+            var header = CurrentHeader;
+            static bool Named(DynamicCard card, string[] names) =>
+                CardIdentity.NameOf(card.ID) is string name && names.Any(n => name.StartsWith(n, StringComparison.OrdinalIgnoreCase));
+
+            if (header.LastChainPlayer != ChainTracker.Opponent && header.LastSummonPlayer == ChainTracker.Opponent)
+            {
+                var special = NewEnemyMonsters(enemyMonsters).FirstOrDefault(m => m.IsExtraCard() || Named(m, SelfSpecialSummoners));
+                return special.ID != 0 ? $"special summon of {special.ID}" : null;
+            }
+
+            if (header.LastChainPlayer == ChainTracker.Opponent)
+            {
+                var monster = enemyMonsters.FirstOrDefault(m => m.IsFaceup() && Named(m, SpecialSummonEffectMonsters));
+                if (monster.ID != 0)
+                    return $"{monster.ID} can special summon";
+                var spell = enemySpells.FirstOrDefault(s => s.IsFaceup() && Named(s, SpecialSummonSpellTraps));
+                if (spell.ID != 0)
+                    return $"{spell.ID} special summons";
+            }
+            return null;
+        }
+
         // Royal Oppression: negate everything the opponent does, never our own plays, never what it can't negate (Vayu).
-        private bool ShouldUseRoyalOppression(DynamicCard card, int lifePoints)
+        private bool ShouldUseRoyalOppression(DynamicCard card, int lifePoints, List<DynamicCard> enemyMonsters, List<DynamicCard> enemySpells)
         {
             var header = CurrentHeader;
 
             // Keep it face-down until the opponent actually goes for a special summon: once face-up,
-            // they can pay 800 to negate *our* summons too.
+            // they can pay 800 to negate *our* summons too (2026-10-17: flipped on a Gearframe search, which it
+            // can't negate, and later they paid twice to destroy our Dark Armed Dragon and Blizzard with it).
             if (!card.IsFaceup())
-                return !IsBotTurn && ChainTracker.Source(header) == ChainTracker.Opponent;
+            {
+                if (IsBotTurn || ChainTracker.Source(header) != ChainTracker.Opponent)
+                    return false;
+                string? reason = SpecialSummonUnderway(enemyMonsters, enemySpells);
+                Log($"Royal Oppression (face-down) window: LastChainPlayer={header.LastChainPlayer} LastSummonPlayer={header.LastSummonPlayer} " +
+                    $"new=[{string.Join(",", NewEnemyMonsters(enemyMonsters).Select(m => m.ID))}] -> {reason ?? "nothing it can negate, stays down"}");
+                return reason != null;
+            }
 
             // We must be able to pay and stay alive.
             if (lifePoints <= 800)
@@ -2077,12 +2136,33 @@ namespace BotTest.Game.AI.Brains
             return await base.OnSelectPositionAsync(context, ct);
         }
 
-        public override Task<bool> OnSelectEffectYnAsync(DecisionContext<SelectEffectYnData> context, CancellationToken ct = default)
+        public override async Task<bool> OnSelectEffectYnAsync(DecisionContext<SelectEffectYnData> context, CancellationToken ct = default)
         {
-            Log($"Effect yes/no: card {context.StateData.EffectCard.ID} desc {context.StateData.Description} -> yes");
+            var effectCard = context.StateData.EffectCard;
+            // An effect that special summons (Blizzard's revive, Shura's floater) into a face-up Royal Oppression:
+            // they pay 800, negate it and destroy our monster. Skip it unless every payment really hurts them.
+            try
+            {
+                await PrepareContextAsync(context, ct);
+                if (effectCard.IsCode(OurSpecialSummonEffects) && CurrentField.EnemySide.LifePoints > 3000 &&
+                    (await GetOwnSpellCardsAsync()).Concat(await GetEnemySpellCardsAsync()).Any(card => card.IsCode(RoyalOppression) && card.IsFaceup()))
+                {
+                    Log($"Effect yes/no: card {effectCard.ID} -> no (its special summon would be negated by Royal Oppression)");
+                    return false;
+                }
+            }
+            catch (Exception e)
+            {
+                Log($"[error] Effect yes/no check failed, answering yes: {e.Message}");
+            }
+
+            Log($"Effect yes/no: card {effectCard.ID} desc {context.StateData.Description} -> yes");
             Chain.MarkOwnAction(context.Header);
-            return Task.FromResult(true);
+            return true;
         }
+
+        /// <summary>Our monsters whose effect special summons (Royal Oppression negates and destroys them).</summary>
+        protected virtual int[] OurSpecialSummonEffects => Array.Empty<int>();
 
         public override Task<bool> OnSelectYesNoAsync(DecisionContext<SelectYesNoData> context, CancellationToken ct = default)
         {

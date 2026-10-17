@@ -204,13 +204,13 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 - Con monstruos propios no se invoca de normal (tributo no se usa para nada que no sea el robado).
 - Contra Gladiator Beast: se guarda si ya tenés un monstruo boca arriba.
 - No usa el efecto si hay un synchro disponible (el synchro tiene prioridad).
-**Cuándo vale la pena el efecto**
-- Tenés 2+ Blackwings boca arriba en posición de ataque.
-- Existe un monstruo rival cuyo poder es mayor o igual a tu mejor ATK individual, pero menor que la suma de los ATK de todos tus Blackwings.
+**Cuándo vale la pena el efecto** (con 2 o más Blackwings boca arriba en ataque que no atacaron)
+- **Para romper algo:** un monstruo rival con poder mayor o igual a tu mejor ATK, pero menor que la suma de todos tus Blackwings. Pumpea a Shura si está.
+- **Para el piercing de Bora:** todos los monstruos rivales están en defensa y son al menos tantos como tus atacantes (o sea, el resto no iba a hacer daño), y Bora pumpeado perfora más que Bora solo. Pumpea a Bora. Ejemplo: Bora 1700 + Sirocco 2000 contra dos tokens de 0 DEF: 3700 de daño en vez de 1700.
 - En ese caso sube el efecto y se marca el turno (ya no hay synchro).
 **A qué apunta / qué elige**
-- El objetivo es Shura si está entre los elegibles; si no, el de mayor ATK.
-- ⚠ El efecto deja a solo ese monstruo atacando: con la limitación de la API #0 (siempre ataca `AttackableCards[0]`), no hay garantía de que ataque el monstruo pumpeado, y si el primero de la lista no es ese, nadie lo usa. (No está claro en el código si se compensa.)
+- El que se eligió al decidir (Bora o Shura); si no está, Shura; si no, el de mayor ATK.
+- Como el efecto impide atacar a los demás, el pumpeado queda solo en la lista de ataque, así que el bug de "ataca solo el primero" no lo afecta.
 - Es lo último de la lista de efectos de monstruo (después de Gale y DAD).
 - Valor de mano: 2 (genérico).
 - Código: `CanUseMonsterEffect`, `IsSiroccoBoostWorthIt`, `ShouldUseSiroccoNowAsync`, `CanSynchroNow`.

@@ -84,6 +84,27 @@ namespace BotTest.Game.AI.Knowledge
         // which is how we detect them (the API doesn't say which card started a chain link).
         public static readonly int[] UnnegatableByRoyalOppression = { VayuTheEmblemOfHonor };
 
+        // What Royal Oppression can negate, by card name (prefix, so errata versions match too):
+        // monsters that only arrive by special summon from the hand,
+        public static readonly string[] SelfSpecialSummoners =
+        {
+            "Quickdraw Synchron", "Cyber Dragon", "Gorz the Emissary of Darkness", "Tragoedia", "Cyber Valley",
+            "Chaos Sorcerer", "Black Luster Soldier", "Dark Armed Dragon", "Judgment Dragon", "Machina Fortress",
+        };
+
+        // monsters whose effect special summons (the chain they start is what it negates),
+        public static readonly string[] SpecialSummonEffectMonsters =
+        {
+            "Lonefire Blossom", "Debris Dragon", "Dandylion", "Plaguespreader Zombie", "Gladiator Beast",
+            "Blackwing - Shura", "Blackwing - Blizzard",
+        };
+
+        // and spells/traps that special summon.
+        public static readonly string[] SpecialSummonSpellTraps =
+        {
+            "Monster Reborn", "Call of the Haunted", "Premature Burial", "Scapegoat", "Future Fusion",
+        };
+
         // Cards we don't mind losing to a forced discard.
         public static readonly int[] HappyToDiscard = { VayuTheEmblemOfHonor, NecroGardna };
 
