@@ -25,3 +25,6 @@ logs/
 
 # Shareable package (dotnet publish output)
 dist/
+
+# Generated rules pages (tools/build_rules_pages.py)
+docs/pages/

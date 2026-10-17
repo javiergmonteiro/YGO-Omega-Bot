@@ -1,0 +1,384 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a judge's binder — sticky search bar, card index on the left, rule cards in one reading column. */
+:root {
+  --bg: #f2f3f6;
+  --surface: #ffffff;
+  --ink: #1c1d29;
+  --muted: #5b5f72;
+  --line: #d8dbe5;
+  --trap: #9c2463;      /* our rules / accent (trap-card magenta) */
+  --spell: #0f766a;     /* deck-specific layer (spell-card teal) */
+  --warn: #9a5b00;
+  --warn-bg: #fff4dd;
+  --chip: #eceef4;
+  --font-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13141b; --surface: #1c1e28; --ink: #e7e8ef; --muted: #a2a6ba; --line: #2e3140;
+    --trap: #e86fa9; --spell: #4cc3b2; --warn: #f0b04c; --warn-bg: #2f2615; --chip: #262938;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13141b; --surface: #1c1e28; --ink: #e7e8ef; --muted: #a2a6ba; --line: #2e3140;
+  --trap: #e86fa9; --spell: #4cc3b2; --warn: #f0b04c; --warn-bg: #2f2615; --chip: #262938;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+a { color: var(--trap); }
+button, select, textarea, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--trap); outline-offset: 2px; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px; }
+.bar-inner { max-width: 1180px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.brand { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+.brand h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+.brand .kind { font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.search { flex: 1 1 260px; display: flex; min-width: 0; }
+.search input { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--trap); }
+.btn.primary { background: var(--trap); border-color: var(--trap); color: var(--surface); font-weight: 600; }
+.count { display: inline-block; min-width: 1.5em; padding: 0 .4em; border-radius: 99px; background: var(--trap); color: var(--surface); font-size: .8rem; font-weight: 700; text-align: center; margin-left: 4px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 60px; }
+nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); align-self: start; max-height: calc(100vh - 100px); overflow-y: auto; font-size: .92rem; padding-right: 6px; }
+nav.index h2 { font-family: var(--font-display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; color: var(--muted); }
+nav.index h3 { font-size: .8rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 10px 0 2px; font-weight: 500; }
+nav.index a { display: block; color: var(--ink); text-decoration: none; padding: 2px 6px; border-radius: 4px; }
+nav.index a:hover { background: var(--chip); }
+nav.index a .dot { color: var(--spell); font-weight: 700; }
+
+main { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.part-title { font-family: var(--font-display); font-size: 2rem; font-weight: 700; margin: 18px 0 0; letter-spacing: .01em; text-wrap: balance; }
+.part-title.base { color: var(--muted); }
+.group-title { font-family: var(--font-mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 6px 0 -6px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; min-width: 0; scroll-margin-top: 90px; }
+.card header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+.card h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.tag { font-family: var(--font-mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; padding: 2px 7px; border-radius: 4px; background: var(--chip); color: var(--muted); }
+.tag.deck { color: var(--spell); }
+.layers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.layers.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.layer { min-width: 0; }
+.layer-label { font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; margin: 10px 0 2px; color: var(--muted); }
+.layer.deck .layer-label { color: var(--spell); }
+.layer.deck { border-left: 3px solid var(--spell); padding-left: 14px; }
+.md { max-width: 68ch; }
+.md p { margin: .5em 0; }
+.md ul, .md ol { margin: .3em 0 .6em; padding-left: 1.3em; }
+.md li { margin: .15em 0; }
+.md strong { font-weight: 700; }
+.md code { font-family: var(--font-mono); font-size: .85em; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+.md p:last-child code:only-child, .md .code-ref { color: var(--muted); }
+.md .warn { background: var(--warn-bg); color: var(--ink); border-radius: 4px; padding: 2px 6px; }
+.md .warn::marker { color: var(--warn); }
+.md hr { display: none; }
+.empty { color: var(--muted); font-style: italic; }
+mark { background: var(--warn-bg); color: var(--ink); padding: 0 1px; border-radius: 2px; }
+
+.comments { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.comment { font-size: .93rem; background: var(--bg); border-radius: 6px; padding: 8px 10px; }
+.comment .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.pill { padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.abierto { color: var(--trap); }
+.pill.resuelto { color: var(--spell); }
+.comment .text { white-space: pre-wrap; margin: 4px 0 0; }
+.comment .reply { white-space: pre-wrap; margin: 6px 0 0; padding-left: 10px; border-left: 3px solid var(--spell); }
+.comment-form { display: grid; gap: 8px; }
+.comment-form .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.comment-form select, .comment-form textarea { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 7px 9px; }
+.comment-form textarea { width: 100%; min-height: 80px; resize: vertical; }
+.status { font-size: .85rem; color: var(--muted); }
+
+.panel { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 0; }
+.panel-inner { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.panel h2 { font-family: var(--font-display); font-size: 1.3rem; margin: 0; }
+.panel .comment a { font-weight: 600; }
+
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); }
+  nav.index { position: static; max-height: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--surface); }
+  nav.index:not(.open) .index-body { display: none; }
+  .layers.two { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 861px) { .index-toggle { display: none; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="bar">
+  <div class="bar-inner">
+    <div class="brand"><span class="kind">__KIND__</span><h1>__HEADING__</h1></div>
+    <form class="search" id="search-form" role="search">
+      <label for="q" class="visually-hidden" hidden>Buscar</label>
+      <input id="q" type="search" placeholder="Buscar una carta o regla (ej. Solemn, Kalut, Heavy Storm)" autocomplete="off">
+    </form>
+    <button class="btn" id="toggle-comments" type="button">Comentarios<span class="count" id="open-count" hidden>0</span></button>
+  </div>
+</div>
+
+<section class="panel" id="comments-panel" hidden>
+  <div class="panel-inner">
+    <h2>Comentarios</h2>
+    <p class="status" id="db-status">Conectando…</p>
+    <div id="all-comments" class="comments" style="border-top:0;padding-top:0"></div>
+  </div>
+</section>
+
+<div class="wrap">
+  <nav class="index" id="index" aria-label="Índice">
+    <button class="btn index-toggle" id="index-toggle" type="button">Índice</button>
+    <div class="index-body" id="index-body"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script id="rules-data" type="application/json">__DATA__</script>
+<script>
+(() => {
+  const DATA = JSON.parse(document.getElementById("rules-data").textContent);
+  const PAGE = DATA.page;            // "edison" or a deck key
+  const DECK = DATA.deckName;        // null on the Edison page
+  const own = DATA.entries;          // this page's sections
+  const base = DATA.base || [];      // Edison sections, on deck pages
+  const fold = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const baseByKey = new Map(base.map(e => [e.key, e]));
+  const ownByKey = new Map(own.map(e => [e.key, e]));
+  let comments = [];
+  let db = null;
+
+  const md = text => {
+    const html = window.marked ? window.marked.parse(text) : "<pre>" + text.replace(/[&<]/g, c => c === "&" ? "&amp;" : "&lt;") + "</pre>";
+    const box = document.createElement("div");
+    box.className = "md";
+    box.innerHTML = html;
+    box.querySelectorAll("li, p").forEach(el => {
+      if (el.firstChild && el.textContent.trim().startsWith("⚠")) el.classList.add("warn");
+    });
+    box.querySelectorAll("p").forEach(p => { if (p.textContent.trim().startsWith("Código:")) p.classList.add("code-ref"); });
+    return box;
+  };
+
+  const highlight = (root, query) => {
+    if (!query) return;
+    const q = fold(query);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const hits = [];
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const i = fold(node.nodeValue).indexOf(q);
+      if (i >= 0) hits.push([node, i]);
+    }
+    hits.forEach(([node, i]) => {
+      const after = node.splitText(i);
+      after.splitText(q.length);
+      const mark = document.createElement("mark");
+      mark.textContent = after.nodeValue;
+      after.replaceWith(mark);
+    });
+  };
+
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+  function commentView(c, withLink) {
+    const box = el("div", "comment");
+    const meta = el("div", "meta");
+    meta.append(el("span", "pill " + (c.estado === "resuelto" ? "resuelto" : "abierto"), c.estado || "abierto"), el("span", null, c.tipo || "comentario"));
+    if (c.creado) meta.append(el("span", null, new Date(c.creado).toLocaleDateString("es-AR")));
+    if (withLink) {
+      const a = el("a", null, c.seccion || c.seccionId);
+      a.href = "#" + c.seccionId;
+      meta.append(a);
+    }
+    box.append(meta, el("p", "text", c.texto || ""));
+    if (c.respuesta) box.append(el("p", "reply", c.respuesta));
+    return box;
+  }
+
+  function commentBlock(entry) {
+    const wrap = el("div", "comments");
+    wrap.dataset.section = entry.id;
+    const list = el("div");
+    list.style.display = "contents";
+    const toggle = el("button", "btn", "Comentar");
+    toggle.type = "button";
+    const form = el("form", "comment-form");
+    form.hidden = true;
+    const row = el("div", "row");
+    const sel = el("select");
+    sel.id = "tipo-" + entry.id;
+    ["Propuesta", "Duda", "Bug"].forEach(t => { const o = el("option", null, t); o.value = t.toLowerCase(); sel.append(o); });
+    const ta = el("textarea");
+    ta.id = "texto-" + entry.id;
+    ta.placeholder = "Qué cambiarías o qué no se entiende de \"" + entry.title + "\"";
+    const send = el("button", "btn primary", "Guardar comentario");
+    send.type = "submit";
+    const status = el("span", "status");
+    row.append(sel, send, status);
+    form.append(ta, row);
+    toggle.addEventListener("click", () => { form.hidden = !form.hidden; if (!form.hidden) ta.focus(); });
+    form.addEventListener("submit", async ev => {
+      ev.preventDefault();
+      const texto = ta.value.trim();
+      if (!texto) { status.textContent = "Escribí algo primero."; return; }
+      if (!db) { status.textContent = "Los comentarios solo se guardan abriendo la página en claude.ai."; return; }
+      send.disabled = true;
+      status.textContent = "Guardando…";
+      try {
+        await db.collection("comentarios").add({
+          pagina: PAGE, seccionId: entry.id, seccion: entry.title, tipo: sel.value, texto,
+          estado: "abierto", respuesta: "", creado: new Date().toISOString(),
+        });
+        ta.value = "";
+        form.hidden = true;
+        status.textContent = "";
+      } catch (e) {
+        status.textContent = e && e.code === "invalid_argument" ? "No tenés permiso para comentar en esta página." : "No se pudo guardar. Probá de nuevo en un rato.";
+      } finally { send.disabled = false; }
+    });
+    wrap.append(list, toggle, form);
+    return wrap;
+  }
+
+  function cardFor(entry, query) {
+    const card = el("article", "card");
+    card.id = entry.id;
+    const head = el("header");
+    head.append(el("h2", null, entry.title));
+    const isDeckEntry = DECK && entry.source === "deck";
+    const counterpart = DECK ? (isDeckEntry ? baseByKey.get(entry.key) : ownByKey.get(entry.key)) : null;
+    const tags = el("div");
+    tags.style.display = "flex"; tags.style.gap = "6px";
+    tags.append(el("span", "tag" + (isDeckEntry ? " deck" : ""), entry.group || entry.part));
+    head.append(tags);
+    card.append(head);
+
+    const layers = el("div", "layers");
+    if (DECK && counterpart) {
+      layers.classList.add("two");
+      const baseEntry = isDeckEntry ? counterpart : entry;
+      const deckEntry = isDeckEntry ? entry : counterpart;
+      const b = el("div", "layer"); b.append(el("div", "layer-label", "Edison Brain (base)"), md(baseEntry.md));
+      const d = el("div", "layer deck"); d.append(el("div", "layer-label", "En " + DECK), md(deckEntry.md));
+      layers.append(b, d);
+    } else if (DECK && !isDeckEntry) {
+      const b = el("div", "layer"); b.append(md(entry.md), el("p", "empty", DECK + " no cambia esta regla."));
+      layers.append(b);
+    } else {
+      const b = el("div", "layer" + (isDeckEntry ? " deck" : "")); b.append(md(entry.md));
+      layers.append(b);
+    }
+    card.append(layers);
+    card.append(commentBlock(entry));
+    highlight(layers, query);
+    return card;
+  }
+
+  function matches(entry, q) {
+    if (!q) return true;
+    const f = fold(q);
+    const other = DECK ? (entry.source === "deck" ? baseByKey.get(entry.key) : ownByKey.get(entry.key)) : null;
+    return fold(entry.title + "\n" + entry.md + "\n" + (other ? other.md : "")).includes(f);
+  }
+
+  function render() {
+    const q = document.getElementById("q").value.trim();
+    const main = document.getElementById("main");
+    main.replaceChildren();
+    const sections = [[DECK || "Edison Brain", own, false]];
+    // On a deck page the base rules follow, minus the ones already shown side by side.
+    if (DECK) sections.push(["Edison Brain (base)", base.filter(e => !ownByKey.has(e.key)), true]);
+    let shown = 0;
+    for (const [title, list, isBase] of sections) {
+      const hits = list.filter(e => matches(e, q));
+      if (!hits.length) continue;
+      main.append(el("h2", "part-title" + (isBase ? " base" : ""), title));
+      let lastGroup = null;
+      for (const entry of hits) {
+        const group = entry.part + " · " + (entry.group || "");
+        if (group !== lastGroup && !q) { main.append(el("p", "group-title", entry.part + (entry.group ? " / " + entry.group : ""))); lastGroup = group; }
+        main.append(cardFor(entry, q));
+        shown++;
+      }
+    }
+    if (!shown) main.append(el("p", "empty", "No hay reglas que mencionen \"" + q + "\"."));
+    paintComments();
+  }
+
+  function renderIndex() {
+    const body = document.getElementById("index-body");
+    body.replaceChildren();
+    const lists = [[DECK || "Edison Brain", own]];
+    if (DECK) lists.push(["Edison Brain (base)", base.filter(e => !ownByKey.has(e.key))]);
+    for (const [title, list] of lists) {
+      body.append(el("h2", null, title));
+      let lastGroup = null;
+      for (const e of list) {
+        const group = e.group || e.part;
+        if (group !== lastGroup) { body.append(el("h3", null, group)); lastGroup = group; }
+        const a = el("a");
+        a.href = "#" + e.id;
+        a.textContent = e.title;
+        if (DECK && e.source === "deck" && baseByKey.has(e.key)) { const dot = el("span", "dot", " ◆"); dot.title = "Cambia una regla del Edison Brain"; a.append(dot); }
+        a.addEventListener("click", () => { document.getElementById("index").classList.remove("open"); });
+        body.append(a);
+      }
+    }
+  }
+
+  function paintComments() {
+    const open = comments.filter(c => c.estado !== "resuelto");
+    const count = document.getElementById("open-count");
+    count.hidden = open.length === 0;
+    count.textContent = String(open.length);
+    const all = document.getElementById("all-comments");
+    all.replaceChildren();
+    const sorted = [...comments].sort((a, b) => (a.estado === "resuelto") - (b.estado === "resuelto") || String(b.creado).localeCompare(String(a.creado)));
+    if (!sorted.length) all.append(el("p", "empty", "Todavía no hay comentarios. Usá \"Comentar\" en cualquier regla para dejar una propuesta, una duda o un bug."));
+    sorted.forEach(c => all.append(commentView(c, true)));
+    document.querySelectorAll(".comments[data-section]").forEach(block => {
+      const list = block.firstChild;
+      list.replaceChildren();
+      comments.filter(c => c.seccionId === block.dataset.section).forEach(c => list.append(commentView(c, false)));
+    });
+  }
+
+  document.getElementById("search-form").addEventListener("submit", e => e.preventDefault());
+  let t;
+  document.getElementById("q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(render, 150); });
+  document.getElementById("toggle-comments").addEventListener("click", () => {
+    const p = document.getElementById("comments-panel");
+    p.hidden = !p.hidden;
+  });
+  document.getElementById("index-toggle").addEventListener("click", () => document.getElementById("index").classList.toggle("open"));
+
+  renderIndex();
+  render();
+
+  (async () => {
+    const status = document.getElementById("db-status");
+    try {
+      db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+    } catch (e) { db = null; }
+    if (!db) { status.textContent = "Los comentarios se ven y se guardan abriendo esta página en claude.ai."; return; }
+    status.textContent = "Lo que dejes acá lo leo al empezar la próxima sesión y te respondo en el mismo comentario.";
+    db.collection("comentarios").onSnapshot(snap => {
+      comments = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      paintComments();
+    }, () => { status.textContent = "No se pudieron cargar los comentarios. Recargá la página."; });
+  })();
+})();
+</script>
