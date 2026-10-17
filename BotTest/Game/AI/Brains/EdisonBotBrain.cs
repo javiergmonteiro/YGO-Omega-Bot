@@ -50,21 +50,34 @@ namespace BotTest.Game.AI.Brains
         // Trap Stun: every trap is negated for the rest of the turn it resolves. Seen face-up on their field, or a new
         // copy in their GY / banished since the turn started.
         private int _trapStunTurn = -1;
-        private (int Turn, int Count) _trapStunBaseline = (-1, 0);
+        // Copies of Trap Stun in their GY / banished at the last look (-1 = not seen yet this game).
+        private int _trapStunSeenCount = -1;
 
         private void UpdateTrapStun(IEnumerable<DynamicCard> enemySpells)
         {
             int turn = CurrentHeader.CurrentTurn;
             var enemy = CurrentField.EnemySide;
-            int used = (enemy.Grave ?? Array.Empty<int>()).Concat(enemy.Banish ?? Array.Empty<int>())
-                .Count(id => CardIdentity.Same(id, TrapStun));
-            if (_trapStunBaseline.Turn != turn)
-                _trapStunBaseline = (turn, used);
-            if (_trapStunTurn != turn && (enemySpells.Any(card => card.IsFaceup() && card.IsCode(TrapStun)) || used > _trapStunBaseline.Count))
+            bool faceUp = enemySpells.Any(card => card.IsFaceup() && card.IsCode(TrapStun));
+
+            // A missing GY reads as "unknown", not as empty: an empty baseline made an old copy look new.
+            if (enemy.Grave == null)
             {
-                _trapStunTurn = turn;
-                Log("Trap Stun resolved: no more traps this turn");
+                if (faceUp && _trapStunTurn != turn)
+                    MarkTrapStun(turn, "face-up on their field");
+                return;
             }
+
+            int used = enemy.Grave.Concat(enemy.Banish ?? Array.Empty<int>()).Count(id => CardIdentity.Same(id, TrapStun));
+            bool newCopy = _trapStunSeenCount >= 0 && used > _trapStunSeenCount;
+            _trapStunSeenCount = used;
+            if (_trapStunTurn != turn && (faceUp || newCopy))
+                MarkTrapStun(turn, faceUp ? "face-up on their field" : $"new copy in GY/banished ({used})");
+        }
+
+        private void MarkTrapStun(int turn, string why)
+        {
+            _trapStunTurn = turn;
+            Log($"Trap Stun resolved ({why}): no more traps this turn");
         }
 
         protected bool TrapsStunned => _trapStunTurn == CurrentHeader.CurrentTurn;
@@ -132,6 +145,29 @@ namespace BotTest.Game.AI.Brains
         private bool _tytannialActive;
 
         protected readonly ChainTracker Chain = new();
+
+        // Turn-keyed memory would match the same turn number in the next game (2026-10-15: a Trap Stun from game 1
+        // turn 9 locked our traps in game 2 turn 9; a game-1 reveal held back an attack in game 3).
+        protected override void OnNewDuel()
+        {
+            Log("New game: clearing what was remembered from the previous one");
+            _activationCount.Clear();
+            _activationTurn = -1;
+            _forcedAttackTarget = null;
+            _seenEnemyMonsters = new();
+            _ownFirstSeen = new();
+            _vayuSummoned.Clear();
+            _trapStunTurn = -1;
+            _trapStunSeenCount = -1;
+            _icarusDoomed = new();
+            _revealedEnemyHand = new();
+            _revealedHandTurn = -1;
+            _revealedPublicBaseline = new();
+            _moonOnAttack = null;
+            _preferredTarget = null;
+            _lastHandLog = null;
+            Chain.Reset();
+        }
 
         protected EdisonBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -772,13 +808,31 @@ namespace BotTest.Game.AI.Brains
             if (occupied >= spellTrapZones - 1 && CurrentField.OwnSide.LifePoints > 2000)
                 return null;
 
-            // Against a possible Heavy Storm, two set cards are enough, unless something set protects the backrow
-            // (Solemn Judgment to negate it, Starlight Road to stop a mass destruction).
             int setCount = board.OwnSpells.Count(card => !card.IsFaceup());
-            bool backrowProtected = board.OwnSpells.Any(card => !card.IsFaceup() && card.IsCode(SolemnJudgment, StarlightRoad));
-            if (setCount >= 2 && !backrowProtected && OpponentMayStillHave(board, HeavyStorm) && CurrentField.OwnSide.LifePoints > 2000)
+            bool desperate = CurrentField.OwnSide.LifePoints <= 2000;
+
+            // Heavy Storm seen in their hand (Dustshoot): one card at most until they use it.
+            if (setCount >= 1 && !desperate && StillInRevealedHand(HeavyStorm))
             {
-                LogOnChange("Two cards set already: holding the rest in case of Heavy Storm");
+                LogOnChange("Heavy Storm seen in their hand: one set card until they use it");
+                return null;
+            }
+
+            // Our own Heavy Storm in hand: keep the backrow small so casting it next turn costs us little.
+            if (setCount >= 1 && !desperate && board.Hand.Any(card => card.IsCode(HeavyStorm)))
+            {
+                LogOnChange("Holding our sets: we have Heavy Storm in hand");
+                return null;
+            }
+
+            // Against a possible Heavy Storm, two set cards are enough, or as many as they have set (then their Storm
+            // costs them as much as us), unless something set protects the backrow (Solemn Judgment to negate it,
+            // Starlight Road to stop a mass destruction).
+            int setCap = Math.Max(2, board.EnemySpells.Count(card => !card.IsFaceup()));
+            bool backrowProtected = board.OwnSpells.Any(card => !card.IsFaceup() && card.IsCode(SolemnJudgment, StarlightRoad));
+            if (setCount >= setCap && !backrowProtected && OpponentMayStillHave(board, HeavyStorm) && !desperate)
+            {
+                LogOnChange($"{setCount} cards set already: holding the rest in case of Heavy Storm");
                 return null;
             }
 
@@ -1091,6 +1145,9 @@ namespace BotTest.Game.AI.Brains
                 .SelectMany(i => enemyMonsters.Select(target => new { Index = i, Target = target, Score = GetAttackScore(attackers[i], target) }))
                 .Where(x => x.Score > 0)
                 .OrderByDescending(x => x.Score)
+                // Every attack-position target scores the same: hit the most dangerous one, not the leftmost
+                // (2026-10-16: Stratos instead of Plasma).
+                .ThenByDescending(x => ThreatScore(x.Target))
                 .ThenByDescending(x => attackers[x.Index].Attack)
                 .FirstOrDefault();
             if (best != null)
@@ -1163,7 +1220,13 @@ namespace BotTest.Game.AI.Brains
             if (lethalIncoming)
                 Log("Lethal attack incoming: any answer goes");
 
-            if (!lethalIncoming && IsStardustBlocking(enemyMonsters, ownSpells, hand) && card.IsCode(DestructionCards))
+            // Their Heavy Storm on the chain (it stays face-up while it resolves).
+            bool theirStormResolving = CurrentHeader.LastChainPlayer == ChainTracker.Opponent &&
+                enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(HeavyStorm));
+
+            // Solemn negating a spell destroys nothing, so Stardust can't stop it.
+            if (!lethalIncoming && IsStardustBlocking(enemyMonsters, ownSpells, hand) && card.IsCode(DestructionCards) &&
+                !(theirStormResolving && card.IsCode(SolemnJudgment)))
                 return false;
 
             UpdateTrapStun(enemySpells);
@@ -1171,6 +1234,25 @@ namespace BotTest.Game.AI.Brains
             {
                 Log($"Not chaining {card.ID}: Trap Stun negates traps this turn");
                 return false;
+            }
+
+            if (theirStormResolving)
+            {
+                // A face-down Oppression can't stop a Storm: chaining it only takes the chain away from Solemn.
+                if (card.IsCode(RoyalOppression) && !card.IsFaceup())
+                    return false;
+
+                // Solemn saves the backrow when the Storm costs us more than it costs them (2026-10-16: four times
+                // the whole backrow, Solemn included, went to a Storm Solemn could have negated).
+                if (card.IsCode(SolemnJudgment) && !Chain.AlreadyChained(Key(card), CurrentHeader))
+                {
+                    int oursLost = ownSpells.Count(spell => spell.CurrentCoordinates.Sequence != card.CurrentCoordinates.Sequence);
+                    int theirsLost = enemySpells.Count(spell => !(spell.IsFaceup() && spell.IsCode(HeavyStorm)));
+                    bool worthIt = oursLost >= 2 && oursLost > theirsLost && CurrentField.OwnSide.LifePoints >= 2000;
+                    if (worthIt)
+                        Log($"Solemn on Heavy Storm: saves {oursLost} of ours (they'd lose {theirsLost})");
+                    return worthIt;
+                }
             }
 
             if (IsTargetingCard(card.ID) &&

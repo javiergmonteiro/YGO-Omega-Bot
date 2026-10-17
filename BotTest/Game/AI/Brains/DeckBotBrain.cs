@@ -266,6 +266,11 @@ namespace BotTest.Game.AI.Brains
 
             var header = context.Header;
             _currentHeader = header;
+
+            // The same brain plays every game of a match and turns restart at 1: a lower turn means a new game.
+            if (_trackedTurn > 0 && header.CurrentTurn < _trackedTurn)
+                OnNewDuel();
+
             if (header.CurrentTurn != _trackedTurn)
             {
                 _trackedTurn = header.CurrentTurn;
@@ -276,6 +281,11 @@ namespace BotTest.Game.AI.Brains
 
             await RefreshFieldAsync();
             return _gameField;
+        }
+
+        /// <summary>A new game of the match started: clear everything remembered from the previous one.</summary>
+        protected virtual void OnNewDuel()
+        {
         }
 
         protected GameField CurrentField =>

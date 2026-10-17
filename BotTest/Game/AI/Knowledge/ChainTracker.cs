@@ -22,6 +22,16 @@ namespace BotTest.Game.AI.Knowledge
         /// <summary>Whether the bot's latest activation was a monster effect (matters for Machina Fortress).</summary>
         public bool LastActivationWasMonsterEffect { get; private set; }
 
+        public void Reset()
+        {
+            _seenEnemyBanished.Clear();
+            _chainedCards.Clear();
+            _markedTurn = -1;
+            _markedPhase = -1;
+            OwnActionPending = false;
+            LastActivationWasMonsterEffect = false;
+        }
+
         public void MarkOwnAction(BotStateHeader header)
         {
             OwnActionPending = true;

@@ -73,6 +73,7 @@ Cada entrada tiene:
 - **Listas enemigas con IDs reales:** las listas del enemigo vienen desde la perspectiva del jugador, donde sus cartas boca abajo muestran el ID real. Las reglas no deben espiar esos IDs (ver el punto de controller + sequence de arriba).
 - **`SelectSum` del framework:** ignora el tuner obligatorio y los combos de una sola carta. Por eso se usa `FindCheapestSum` propio.
 - **Ataque base:** saltea a los monstruos rivales negados (`IsDisabled`), por ejemplo con Plasma. Por eso se usa `DecideGenericAttackAsync` propio.
+- **Una misma instancia del brain juega todas las partidas del match**, y los turnos vuelven a 1 en cada partida. Todo estado indexado por turno (Trap Stun, mano revelada, Vayu, `ChainTracker`) coincide con el mismo número de turno de la partida siguiente. `DeckBotBrain.PrepareContextAsync` detecta la partida nueva (el turno baja) y llama a `OnNewDuel()`. **Si agregás un campo de estado, limpialo ahí.** Ya pasó: un Trap Stun de la partida 1, turno 9, bloqueó las trampas en el turno 9 de la partida 2.
 - **Excepciones:** antes, cualquier excepción en una decisión terminaba el loop del heartbeat y el bot moría. Ahora las decisiones de `EdisonBotBrain` pasan por `On*Async → Decide*CoreAsync`, con try/catch que vuelve a la respuesta base. Si agregás un override nuevo, que siga ese patrón.
 
 ---

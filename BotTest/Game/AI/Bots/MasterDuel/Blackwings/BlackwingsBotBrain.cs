@@ -63,6 +63,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
         protected override string LogTag => "[Blackwings]";
 
+        protected override void OnNewDuel()
+        {
+            base.OnNewDuel();
+            _siroccoUsedTurn = -1;
+            _siroccoTargetPending = false;
+            _kalutBattle = null;
+            _enemyMonstersNow = null;
+            _ownMonstersNow = null;
+        }
+
         protected override int[] SynchroPriority { get; } =
         {
             BlackwingArmorMaster, SilverwindTheAscendant, DarkEndDragon, RedDragonArchfiend,
@@ -520,6 +530,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             // They attack: save our monster if it's worth saving and the boost turns the battle.
             if (ours.IsDefense())
                 return false;
+
+            // This battle kills us and the boost keeps us alive: no monster is too small to save then
+            // (2026-10-16: Fortress into a 1400 Kalut at 900 LP, with another Kalut in hand).
+            int lifePoints = ownSide.LifePoints;
+            if (theirs.Attack - ours.Attack >= lifePoints && theirs.Attack - (ours.Attack + boost) < lifePoints)
+            {
+                Log("Kalut: this battle would be lethal");
+                return true;
+            }
+
             bool important = ours.IsCode(ShuraTheBlueFlame) || ours.IsExtraCard() || ours.Attack >= 1700;
             bool wouldDie = theirs.Attack >= ours.Attack;
             if (!(important && wouldDie && ours.Attack + boost > theirs.Attack))
