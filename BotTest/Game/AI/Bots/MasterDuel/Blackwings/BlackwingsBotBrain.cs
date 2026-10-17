@@ -118,6 +118,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         protected override int BattleBoostInHand(List<DynamicCard> hand) =>
             hand.Any(card => card.IsCode(KalutTheMoonShadow)) ? 1400 : 0;
 
+        protected override bool CanBeBoosted(DynamicCard card) => card.IsCode(BlackwingMonsters);
+
         // A stolen monster becomes synchro material with Gale (special from hand, needs a Blackwing on field)
         // or Blizzard (normal summon), or the tribute for Sirocco.
         protected override bool CanUseStolenMonster(DynamicCard target, IdleCmdData state, Board board)
@@ -188,7 +190,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             if (TrySynchroSummon(state, board, out var synchro))
                 return synchro;
 
-            // Tribute summon Sirocco using a stolen monster.
+            // Tribute summon Sirocco using a stolen monster. A stolen monster that hits harder than Sirocco attacks
+            // first and is tributed in Main Phase 2 (2026-10-16: a stolen Fortress tributed before its 2500 attack).
+            bool stolenAttacksFirst = board.IsMain1 && state.CanBattlePhase && ownMonsters.Any(card =>
+                IsStolen(card) && card.IsFaceup() && card.IsAttack() && !card.Attacked && card.Attack >= 2000);
+            if (stolenAttacksFirst && TryGetSummonable(state, SiroccoTheDawn, out _))
+            {
+                // Keep the Normal Summon for Sirocco: nothing else is summoned before the battle.
+                LogOnChange("Stolen monster attacks first; Sirocco's tribute waits for Main Phase 2");
+                foreach (var card in state.SummonableCards ?? Array.Empty<DynamicCard>())
+                    _heldBack.Add(card.ID);
+                return null;
+            }
             if (board.ControlsStolenMonster && TryGetSummonable(state, SiroccoTheDawn, out var siroccoTribute))
             {
                 Log("Tributing stolen monster for Sirocco");

@@ -140,6 +140,9 @@ namespace BotTest.Game.AI.Brains
         // A target chosen while deciding to chain (e.g. Book of Moon on the attacker).
         private DynamicCard? _preferredTarget;
 
+        // Enemy monsters a multi-target removal must take first (e.g. the tuner pair Icarus breaks up).
+        private List<DynamicCard> _priorityTargets = new();
+
         // Tytannial (with a Plant to tribute) is on their field at the current idle decision.
         private bool _targetingBlocked;
         private bool _tytannialActive;
@@ -165,6 +168,7 @@ namespace BotTest.Game.AI.Brains
             _revealedPublicBaseline = new();
             _moonOnAttack = null;
             _preferredTarget = null;
+            _priorityTargets = new();
             _lastHandLog = null;
             Chain.Reset();
         }
@@ -242,6 +246,9 @@ namespace BotTest.Game.AI.Brains
 
         /// <summary>ATK we can add in battle from hand (e.g. Kalut), for "can we beat it" checks.</summary>
         protected virtual int BattleBoostInHand(List<DynamicCard> hand) => 0;
+
+        /// <summary>Whether the pump from <see cref="BattleBoostInHand"/> can be used on this monster (Kalut: Blackwings only).</summary>
+        protected virtual bool CanBeBoosted(DynamicCard card) => false;
 
         /// <summary>Deck veto on synchro summons right now (e.g. a monster already locked as the only attacker).</summary>
         protected virtual bool CanSynchroNow(Board board) => true;
@@ -600,6 +607,23 @@ namespace BotTest.Game.AI.Brains
         /// Synchro summons by <see cref="SynchroPriority"/>: on our turn, or any time we hold a stolen monster
         /// (it becomes material). Black Rose only when clearly behind and not into an active Stardust.
         /// </summary>
+        // The materials can attack first and the synchro still comes in Main Phase 2, when the attacks are safe and
+        // each one already wins: nothing set on their side (no Mirror Force / Torrential on the materials) and every
+        // monster of theirs is beaten by our weakest attacker (2026-10-16: Armor Master in Main Phase 1
+        // dealt nothing and left a token; Bora piercing + Gale on the tokens first was 1700 and a clean field).
+        protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board)
+        {
+            if (!IsBotTurn || !board.IsMain1 || !state.CanBattlePhase || board.EnemySpells.Any(card => !card.IsFaceup()))
+                return false;
+
+            var attackers = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).ToList();
+            if (attackers.Count == 0 || board.EnemyMonsters.Count == 0)
+                return false;
+
+            var weakest = attackers.OrderBy(card => card.Attack).First();
+            return board.EnemyMonsters.All(enemy => enemy.IsFaceup() && GetAttackScore(weakest, enemy) > 0);
+        }
+
         protected bool TrySynchroSummon(IdleCmdData state, Board board, out IdleCmdResponse response)
         {
             response = default;
@@ -635,6 +659,12 @@ namespace BotTest.Game.AI.Brains
                 .ToList();
             if (options.Count == 0)
                 return false;
+
+            if (ShouldAttackBeforeSynchro(state, board))
+            {
+                LogOnChange("Synchro waits for Main Phase 2: the materials attack first");
+                return false;
+            }
 
             var best = options.OrderByDescending(card => ScoreSynchro(card.ID, board)).First();
             Log($"Synchro summon: {best.ID} (score {ScoreSynchro(best.ID, board)} among {string.Join(",", options.Select(o => o.ID))})");
@@ -1122,12 +1152,13 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
-            return await DecideGenericAttackAsync(context, attackers, battleTargets);
+            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost);
         }
 
         // Generic attack choice. Unlike the framework's base logic, negated monsters still count as monsters
         // (with Plasma on our side every opponent monster is negated, and the base logic then saw an empty field).
-        private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers, List<DynamicCard> enemyMonsters)
+        private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers,
+            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost)
         {
             var ready = Enumerable.Range(0, attackers.Length).Where(i => !attackers[i].Attacked).ToList();
             BattleCmdResponse Done() => context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
@@ -1141,9 +1172,28 @@ namespace BotTest.Game.AI.Brains
                 return Task.FromResult(AttackWith(attackers[direct]));
             }
 
+            // A stolen monster goes back at the End Phase: trading it is free, so ties count too (2026-10-16: a stolen
+            // Stardust hit a token instead of trading with the Machina Fortress that then dealt lethal).
+            foreach (int i in ready.Where(i => IsStolen(attackers[i])))
+            {
+                var trade = enemyMonsters
+                    .Where(card => card.IsFaceup() && (card.Type & TokenType) == 0 && card.IsAttack() && card.Attack == attackers[i].Attack)
+                    .OrderByDescending(ThreatScore)
+                    .FirstOrDefault();
+                if (trade.ID > 0 && enemyMonsters.All(card => GetAttackScore(attackers[i], card) <= 0 || ThreatScore(card) < ThreatScore(trade)))
+                {
+                    Log($"Stolen {attackers[i].ID} trades with {trade.ID}");
+                    _forcedAttackTarget = trade;
+                    return Task.FromResult(AttackWith(attackers[i]));
+                }
+            }
+
             var best = ready
                 .SelectMany(i => enemyMonsters.Select(target => new { Index = i, Target = target, Score = GetAttackScore(attackers[i], target) }))
                 .Where(x => x.Score > 0)
+                // Destroying Machina Fortress in battle lets it destroy the attacker: not with a monster we need
+                // (2026-10-16: Dark Armed Dragon), unless it's a stolen one.
+                .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]))
                 .OrderByDescending(x => x.Score)
                 // Every attack-position target scores the same: hit the most dangerous one, not the leftmost
                 // (2026-10-16: Stratos instead of Plasma).
@@ -1155,6 +1205,45 @@ namespace BotTest.Game.AI.Brains
                 Log($"{attackers[best.Index].ID} attacks {best.Target.ID}");
                 _forcedAttackTarget = best.Target;
                 return Task.FromResult(AttackWith(attackers[best.Index]));
+            }
+
+            // Nothing it beats alone, but a damage-step pump in hand (Kalut) makes it win: attack, the pump fires then
+            // (2026-10-16: Armed Wing 2300 + Kalut never attacked Tytannial 2800).
+            if (ready.Count > 0 && boost > 0 && CanBeBoosted(attackers[ready[0]]))
+            {
+                var attacker = attackers[ready[0]];
+                var pumped = enemyMonsters
+                    .Where(card => card.IsFaceup() && !card.IsCode(PunishesBattleDestruction))
+                    .Where(card => card.GetRealPower() >= attacker.Attack && card.GetRealPower() < attacker.Attack + boost)
+                    .OrderByDescending(ThreatScore)
+                    .FirstOrDefault();
+                if (pumped.ID > 0)
+                {
+                    Log($"{attacker.ID} attacks {pumped.ID}, counting on the {boost} pump in hand");
+                    _forcedAttackTarget = pumped;
+                    return Task.FromResult(AttackWith(attacker));
+                }
+            }
+
+            // The first in the list can't win, but someone behind it can (only the first one can attack, and staying
+            // back holds everyone): bounce off a defender whose DEF is barely above its ATK, so the next one gets
+            // its turn (2026-10-16: Blizzard blocked Shura, which beat their defender).
+            bool someoneBehindWins = allAttackers.Skip(1).Any(card => !card.Attacked && enemyMonsters.Any(target => GetAttackScore(card, target) > 0));
+            if (ready.Count > 0 && someoneBehindWins)
+            {
+                var attacker = attackers[ready[0]];
+                int lifePoints = CurrentField.OwnSide.LifePoints;
+                var cushion = enemyMonsters
+                    .Where(card => card.IsFaceup() && card.IsDefense() && card.Defense >= attacker.Attack)
+                    .Where(card => card.Defense - attacker.Attack <= 500 && card.Defense - attacker.Attack < lifePoints - 1000)
+                    .OrderBy(card => card.Defense - attacker.Attack)
+                    .FirstOrDefault();
+                if (cushion.ID > 0)
+                {
+                    Log($"{attacker.ID} bounces off {cushion.ID} ({cushion.Defense - attacker.Attack} damage) so the next attacker gets its turn");
+                    _forcedAttackTarget = cushion;
+                    return Task.FromResult(AttackWith(attacker));
+                }
             }
 
             // A face-down defender (unknown DEF): poke it with the strongest attacker.
@@ -1574,6 +1663,19 @@ namespace BotTest.Game.AI.Brains
         //  - we're behind (more cards on their side, or a monster we can't beat), or
         //  - they have 2+ backrows to clear.
         // The tribute itself is picked by MaterialCost (least useful first).
+        private static (DynamicCard Tuner, DynamicCard Other)? FindBlackRosePair(List<DynamicCard> enemyMonsters)
+        {
+            var faceUp = enemyMonsters.Where(card => card.IsFaceup() && card.Level > 0).ToList();
+            foreach (var tuner in faceUp.Where(card => card.HasType((CardType)TunerType)))
+            {
+                var other = faceUp.FirstOrDefault(card => card.CurrentCoordinates.Sequence != tuner.CurrentCoordinates.Sequence &&
+                    !card.HasType((CardType)TunerType) && tuner.Level + card.Level == 7);
+                if (other.Level > 0)
+                    return (tuner, other);
+            }
+            return null;
+        }
+
         private async Task<bool> ShouldUseIcarus(List<DynamicCard> enemyMonsters, List<DynamicCard> enemySpells)
         {
             if (enemyMonsters.Count + enemySpells.Count < 2)
@@ -1584,6 +1686,22 @@ namespace BotTest.Game.AI.Brains
             if (ownSide.HasBattlingMonster && enemySide.HasBattlingMonster && StillOnField(enemySide.BattlingMonster, enemyMonsters) &&
                 enemySide.BattlingMonster.Attack >= ownSide.BattlingMonster.GetRealPower())
                 return true;
+
+            // A tuner and a non-tuner of theirs that add up to level 7 are a Black Rose waiting to wipe the field:
+            // break the pair up first when the wipe would cost us 2+ cards (2026-10-16: Debris + Dandylion looked
+            // cheap at 1300 of value, then Black Rose took Sirocco, Icarus and Prison).
+            if (!IsBotTurn && FindBlackRosePair(enemyMonsters) is { } pair)
+            {
+                int oursAtRisk = (await GetBotMonsterCardsAsync()).Count + (await GetOwnSpellCardsAsync()).Count - 1;
+                bool blackRoseLeft = CardCounter.OpponentCopiesLeft(BlackRoseDragon, enemySide.Grave, enemySide.Banish,
+                    enemyMonsters.Where(card => card.IsFaceup()).Select(card => card.ID)) > 0;
+                if (blackRoseLeft && oursAtRisk >= 2)
+                {
+                    Log($"Icarus on {pair.Tuner.ID} + {pair.Other.ID}: level 7 for Black Rose ({oursAtRisk} of ours at risk)");
+                    _priorityTargets = new List<DynamicCard> { pair.Tuner, pair.Other };
+                    return true;
+                }
+            }
 
             // Otherwise compare what it takes (the two most valuable targets) with what it costs:
             // Icarus itself plus the monster we tribute (the cheapest one, by MaterialCost; half its value,
@@ -1785,6 +1903,9 @@ namespace BotTest.Game.AI.Brains
                 ? enemyMonsterCards.Where(card => IsProtectedByUnion(card, enemySpellCards)).ToList()
                 : new List<DynamicCard>();
 
+            var priorityTargets = _priorityTargets;
+            _priorityTargets = new();
+
             var picks = selectable
                 .Select((card, index) => new { Card = card, Index = index })
                 .Where(x => IsEnemyCard(x.Card, enemyCards))
@@ -1793,9 +1914,12 @@ namespace BotTest.Game.AI.Brains
                 // A face-up normal/quick-play spell or normal trap is just resolving: destroying it does nothing.
                 .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
                 .Where(x => !avoidPunishers || !x.Card.IsCode(PunishesMonsterTargeting))
+                // Monsters marked when deciding to chain (the synchro pair Icarus breaks up) go first.
+                .OrderByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                    priorityTargets.Any(p => p.CurrentCoordinates.Sequence == x.Card.CurrentCoordinates.Sequence))
                 // Single-target removal on monsters keeps going for the biggest monster threat; multi-target removal
                 // (Icarus) takes the most valuable cards, backrow included.
-                .OrderByDescending(x => state.Minimum >= 2 ? 0 : (x.Card.CurrentCoordinates.Location == preferredLocation ? 1 : 0))
+                .ThenByDescending(x => state.Minimum >= 2 ? 0 : (x.Card.CurrentCoordinates.Location == preferredLocation ? 1 : 0))
                 .ThenByDescending(x => RemovalValue(x.Card))
                 .Take(Math.Max(state.Minimum, 1))
                 .Select(x => (byte)x.Index)
@@ -2019,9 +2143,12 @@ namespace BotTest.Game.AI.Brains
             if (fortress.ID == 0)
                 return true;
 
+            // Beating it in battle only counts with a monster we can afford to lose to its effect: important monsters
+            // don't attack it (2026-10-16: DAD skipped its effect on Fortress, attacked it, and was destroyed).
             var ownMonsters = await GetBotMonsterCardsAsync();
-            int ownBest = ownMonsters.Select(card => card.Attack).DefaultIfEmpty(0).Max() +
-                (ownMonsters.Count > 0 ? BattleBoostInHand(hand) : 0);
+            var expendable = ownMonsters.Where(card => !IsImportantMonster(card) || IsStolen(card)).ToList();
+            int ownBest = expendable.Select(card => card.Attack).DefaultIfEmpty(0).Max() +
+                (expendable.Count > 0 ? BattleBoostInHand(hand) : 0);
 
             bool unbeatable = ownBest <= fortress.GetRealPower();
             bool dangerous = ownMonsters.Count == 0 || CurrentField.OwnSide.LifePoints <= fortress.Attack * 2;
