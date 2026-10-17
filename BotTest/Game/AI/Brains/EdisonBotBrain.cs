@@ -508,12 +508,14 @@ namespace BotTest.Game.AI.Brains
                 return Result(response);
 
             // Brain Control the most threatening monster (Stardust first), but only with a plan for it this turn.
+            // Tytannial cornered (the only Plant of theirs) is a plan on its own: she tributes herself to negate it,
+            // or we take the monster.
             var priorityEnemy = GetPriorityEnemyMonster(board.EnemyMonsters.Where(card => card.IsFaceup()));
             if (priorityEnemy.ID > 0 &&
                 ThreatScore(priorityEnemy) >= 1500 &&
                 CurrentField.OwnSide.LifePoints > 1600 &&
                 TryGetActivable(state, BrainControl, out _) &&
-                HasPlanForStolenMonster(priorityEnemy, state, board) &&
+                (HasPlanForStolenMonster(priorityEnemy, state, board) || (board.IsMain1 && TytannialCornered)) &&
                 TryActivate(state, BrainControl, board.StardustBlocking, out response))
                 return Result(response);
 
@@ -931,7 +933,9 @@ namespace BotTest.Game.AI.Brains
             if (TrapsStunned && card.HasType(CardType.Trap))
                 return false;
 
-            if (IsTargetingCard(cardId) && (_targetingBlocked || (CostlyTargeting.Contains(cardId) && _tytannialActive)))
+            // Tytannial cornered (no other Plant to tribute): burning a card to make her tribute herself is worth it,
+            // costly targeting included (Javier, 2026-10-17).
+            if (IsTargetingCard(cardId) && _targetingBlocked)
             {
                 Log($"Not activating {cardId}: Tytannial would negate it");
                 return false;
@@ -1380,8 +1384,7 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
-            if (IsTargetingCard(card.ID) &&
-                (IsTargetingBlocked(enemyMonsters) || (card.IsCode(CostlyTargeting) && IsTytannialActive(enemyMonsters))))
+            if (IsTargetingCard(card.ID) && IsTargetingBlocked(enemyMonsters))
                 return false;
 
             int lifePoints = CurrentField.OwnSide.LifePoints;
@@ -2461,6 +2464,9 @@ namespace BotTest.Game.AI.Brains
 
         protected static bool IsTytannialActive(IEnumerable<DynamicCard> enemyMonsters) =>
             enemyMonsters.Any(card => card.IsCode(NegatesFieldTargeting) && card.IsFaceup() && !card.IsDisabled());
+
+        /// <summary>A face-up Tytannial that can only tribute herself to negate: any targeting makes her leave.</summary>
+        protected bool TytannialCornered => _tytannialActive && !_targetingBlocked;
 
         protected bool IsTargetingCard(int cardId) => TargetsOnField.Contains(cardId) || DeckTargetingCards.Contains(cardId);
 

@@ -123,10 +123,6 @@ namespace BotTest.Game.AI.Knowledge
         public const int PlantRace = 0x400;
         public const int TytannialPrincessOfCamellias = 11819616;
 
-        // Targeting cards that cost us an extra card (tribute, banish, discard): even a Tytannial that has to tribute
-        // itself to negate them leaves us down a card, so they wait while any Tytannial is active.
-        public static readonly int[] CostlyTargeting = { IcarusAttack, DarkArmedDragon, BrionacDragonOfTheIceBarrier };
-
         // Destroying these in battle triggers an effect against us (Machina Fortress destroys one of our cards).
         public static readonly int[] PunishesBattleDestruction = { MachinaFortress };
 

@@ -455,6 +455,7 @@ Código: `DecideGenericOpeningAsync` (stormEdge), `DecideSets`
   - Un uso propio del mazo (por ejemplo tributarlo, ver sección de mazo).
 - No se roba "para guardar" ni en Main 2.
 - Tytannial con otro Plant lo bloquea (apunta).
+- Tytannial acorralada (es su único Plant) es plan suficiente en nuestro Main 1: o se autosacrifica para negarlo, o nos quedamos con el monstruo.
 - Tras robar: el monstruo robado es el material más barato (-1000), ataca con empates a su favor (vuelve al End Phase), y si es Stardust no usa su efecto (se destruye en vez de volver).
 - Se prefiere el mismo monstruo al elegir objetivo (misma tabla de amenaza).
 
@@ -532,11 +533,11 @@ Código: `IsFortressTargetWorthItAsync`, `IsFortressTrap`, `WillTargetFortress`,
 
 **Niega todo lo que apunte a una carta del campo, tributando un Plant boca arriba (puede ser ella misma).**
 - Si tiene otro Plant (Fluff Token, etc.): ninguna carta que apunte se juega (Mystical Space Typhoon, Book of Moon, Brain Control, Dimensional Prison, Icarus Attack, y los efectos de apuntado del mazo, incluidos Dark Armed Dragon, Dark End Dragon y Brionac).
-- Si solo puede tributarse ella: el trueque se acepta, salvo para las cartas que cuestan una carta extra (Icarus, Dark Armed Dragon, Brionac), que no se usan mientras haya cualquier Tytannial activa.
+- **Si solo puede tributarse ella (acorralada): se juega cualquier carta que apunte, aunque cueste una carta extra (Icarus, Dark Armed Dragon, Brionac).** Quemar un recurso para que se autosacrifique conviene.
 - No cuenta si está negada o boca abajo.
 - El Plant se detecta por raza, no por nombre.
 
-Código: `IsTargetingBlocked`, `IsTytannialActive`, `TryActivate`
+Código: `IsTargetingBlocked`, `IsTytannialActive`, `TytannialCornered`, `TryActivate`
 
 ### Gladiator Beasts
 
