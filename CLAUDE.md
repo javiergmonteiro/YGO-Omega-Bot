@@ -11,6 +11,11 @@ Bot for YGO Omega (Edison format, Blackwings deck) built on duelbotwrapper. The 
 - Javier prefers few, targeted rules (gated by matchup or situation) over broad changes that can break other plays.
 - Compare cards with `IsCode` or `CardIdentity`, never with raw IDs, because errata versions have different IDs.
 
+## Rules document (docs/REGLAS.md)
+- `docs/REGLAS.md` describes every bot decision in plain Spanish for Javier. Read it first to know the intent of a rule before reading code.
+- Every commit that changes a rule updates the matching section of `REGLAS.md` in the same commit (keep the style: bold decision, bullet conditions, `Código:` line).
+- Javier leaves `> PROPUESTA:` and `> DUDA:` lines in it. At the start of a session, grep for them; implement or answer each one, then delete it.
+
 ## Reviewing a test session
 Two steps, so the expensive model only reads summaries:
 1. **Summarize (Sonnet).** Find the session folders not reviewed yet: no `resumen.md` inside, and newer than the last folder named in the git log. Launch one `log-reviewer` agent per folder (`.claude/agents/log-reviewer.md`, runs on Sonnet), all in parallel. Each writes `logs/<folder>/resumen.md`: notes, evidence, the rule that fired, verdict.

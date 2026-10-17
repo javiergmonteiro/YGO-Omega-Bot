@@ -603,10 +603,6 @@ namespace BotTest.Game.AI.Brains
         private static bool SameCard(DynamicCard a, DynamicCard b) =>
             a.ID == b.ID && a.CurrentCoordinates.Sequence == b.CurrentCoordinates.Sequence;
 
-        /// <summary>
-        /// Synchro summons by <see cref="SynchroPriority"/>: on our turn, or any time we hold a stolen monster
-        /// (it becomes material). Black Rose only when clearly behind and not into an active Stardust.
-        /// </summary>
         // The materials can attack first and the synchro still comes in Main Phase 2, when the attacks are safe and
         // each one already wins: nothing set on their side (no Mirror Force / Torrential on the materials) and every
         // monster of theirs is beaten by our weakest attacker (2026-10-16: Armor Master in Main Phase 1
@@ -624,6 +620,10 @@ namespace BotTest.Game.AI.Brains
             return board.EnemyMonsters.All(enemy => enemy.IsFaceup() && GetAttackScore(weakest, enemy) > 0);
         }
 
+        /// <summary>
+        /// Synchro summons by <see cref="SynchroPriority"/>: on our turn, or any time we hold a stolen monster
+        /// (it becomes material). Black Rose only when clearly behind and not into an active Stardust.
+        /// </summary>
         protected bool TrySynchroSummon(IdleCmdData state, Board board, out IdleCmdResponse response)
         {
             response = default;
