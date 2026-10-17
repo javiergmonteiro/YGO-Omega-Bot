@@ -12,7 +12,11 @@ Bot for YGO Omega (Edison format, Blackwings deck) built on duelbotwrapper. The 
 - Compare cards with `IsCode` or `CardIdentity`, never with raw IDs, because errata versions have different IDs.
 
 ## Reviewing a test session
-Don't ask Javier to paste logs. Read them yourself, filtered, because the raw lines are expensive:
+Two steps, so the expensive model only reads summaries:
+1. **Summarize (Sonnet).** Find the session folders not reviewed yet: no `resumen.md` inside, and newer than the last folder named in the git log. Launch one `log-reviewer` agent per folder (`.claude/agents/log-reviewer.md`, runs on Sonnet), all in parallel. Each writes `logs/<folder>/resumen.md`: notes, evidence, the rule that fired, verdict.
+2. **Fix (main session).** Read only the `resumen.md` files. Group the notes by theme, decide the fixes, apply them, build, and commit naming the folders reviewed. Go back to the raw logs only to settle a specific doubt the summary leaves open.
+
+Don't ask Javier to paste logs. If you do read raw logs, filter them, because the raw lines are expensive:
 - Location: `logs/<date>_<deck>/`. Use the latest folder.
 - Read in this order:
   1. `notas.txt`: his notes, with the turn they refer to.
