@@ -1419,6 +1419,22 @@ namespace BotTest.Game.AI.Brains
             if (deckDecision.HasValue)
                 return deckDecision.Value;
 
+            // The engine also offers Main Phase monster effects in the window right after our own summon: they pass
+            // the same check as in the Main Phase (2026-10-17: Dark Armed Dragon fired into an empty field and
+            // destroyed itself).
+            int mainPhaseEffect = Array.Find(MonsterEffectCards, id => card.IsCode(id));
+            if (mainPhaseEffect != 0 && IsBotTurn)
+            {
+                var board = await BuildBoardAsync();
+                bool fortressOk = await IsFortressTargetWorthItAsync(board.Hand);
+                var monsterTargets = board.EnemyMonsters.Where(target => !IsFortressTrap(target, fortressOk)).ToList();
+                if (!CanUseMonsterEffect(mainPhaseEffect, board, monsterTargets))
+                {
+                    Log($"Not chaining {card.ID}: its Main Phase condition fails");
+                    return false;
+                }
+            }
+
             // Monster effects (floaters, triggers, Stardust...) are always worth using.
             if (card.HasType(CardType.Monster))
                 return true;

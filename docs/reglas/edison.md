@@ -158,6 +158,7 @@ Antes de mirar la ficha de cada carta, el bot aplica estos filtros en orden:
 9. **Contra Gladiator Beasts,** Bottomless espera a Bestiari, Gyzarus o Heraklinos.
 
 **Los efectos de monstruos** se usan siempre que se ofrecen, salvo que el mazo diga otra cosa (Kalut, Sirocco: ver Blackwings).
+- **Los efectos que el bot usa en la Main Phase (Dark Armed Dragon, Dark End, Brionac...) piden la misma condición cuando el juego los ofrece en la ventana justo después de nuestra invocación.** Sin esto, Dark Armed Dragon se activó con el campo del rival vacío y se destruyó a sí mismo.
 
 `Código: ShouldChain, DecideSelectChainCoreAsync`
 
