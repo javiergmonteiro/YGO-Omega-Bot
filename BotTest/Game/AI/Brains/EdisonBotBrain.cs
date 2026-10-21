@@ -353,6 +353,28 @@ namespace BotTest.Game.AI.Brains
             _lastRepeatedLog = message;
         }
 
+        // Diagnostics: "id:ATK" plus position (A/D) and "set" when face-down, e.g. "44508094:2500A 65192027:set".
+        protected static string DescribeCards(IEnumerable<DynamicCard> cards) =>
+            string.Join(" ", cards.Select(card => !card.IsFaceup()
+                ? $"{card.ID}:set"
+                : card.HasType(CardType.Monster) ? $"{card.ID}:{card.Attack}{(card.IsAttack() ? "A" : "D")}" : $"{card.ID}:up"));
+
+        protected static string DescribeIds(DynamicCard[]? cards) =>
+            string.Join(",", (cards ?? Array.Empty<DynamicCard>()).Select(card => card.ID));
+
+        private string? _lastBoardLog;
+
+        // LP and both fields, once per change: the logs had no LP and "why didn't it do X" needs the board.
+        private void LogBoard(Board board)
+        {
+            string boardLog = $"Board (turn {CurrentHeader.CurrentTurn}, LP {CurrentField.OwnSide.LifePoints} vs {CurrentField.EnemySide.LifePoints}): " +
+                $"ours [{DescribeCards(board.OwnMonsters)}] [{DescribeCards(board.OwnSpells)}] | " +
+                $"theirs [{DescribeCards(board.EnemyMonsters)}] [{DescribeCards(board.EnemySpells)}]";
+            if (boardLog != _lastBoardLog)
+                Log(boardLog);
+            _lastBoardLog = boardLog;
+        }
+
         // ---- Idle (Main Phase) ------------------------------------------------------------------------
 
         private async Task<IdleCmdResponse> DecideIdleCmdCoreAsync(DecisionContext<IdleCmdData> context, CancellationToken ct)
@@ -384,6 +406,7 @@ namespace BotTest.Game.AI.Brains
             if (handLog != _lastHandLog)
                 Log(handLog);
             _lastHandLog = handLog;
+            LogBoard(board);
 
             var response = await DecideGenericOpeningAsync(state, board);
             if (response.HasValue)
@@ -441,6 +464,12 @@ namespace BotTest.Game.AI.Brains
                 // attack: if they attack it, the pump wins the battle (and Shura's effect triggers on their turn too).
                 .Where(card => !(card.IsAttack() && canPump && card.Attack + BattleBoostInHand(board.Hand) > strongestEnemyAttack))
                 .ToArray();
+            // No rule played anything: what the engine still offered, so "why did it pass with X in hand" has an answer
+            // (2026-10-21: Brain Control, Black Whirlwind and Sirocco stayed in hand with nothing logged).
+            LogOnChange($"No rule played anything ({(DuelPhase)CurrentHeader.CurrentPhase}). Engine offered: activate [{DescribeIds(state.ActivableCards)}] " +
+                $"summon [{DescribeIds(state.SummonableCards)}] special [{DescribeIds(state.SpecialSummonableCards)}] " +
+                $"set monster [{DescribeIds(state.MonsterSetableCards)}] set spell [{DescribeIds(state.SpellSetableCards)}]" +
+                (holdBack ? " (holding back: lethal on board)" : ""));
             return await base.OnIdleCmdAsync(context with { StateData = filtered }, ct);
         }
 
@@ -1216,7 +1245,13 @@ namespace BotTest.Game.AI.Brains
             DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost)
         {
             var ready = Enumerable.Range(0, attackers.Length).Where(i => !attackers[i].Attacked).ToList();
-            BattleCmdResponse Done() => context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
+            BattleCmdResponse Done()
+            {
+                // A monster that could attack and didn't (2026-10-17: Armor Master stayed put with nothing logged).
+                if (ready.Count > 0)
+                    LogOnChange($"No attack with [{DescribeCards(ready.Select(i => attackers[i]))}] into [{DescribeCards(enemyMonsters)}]: no attack rule matched");
+                return context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
+            }
 
             if (enemyMonsters.Count == 0)
             {
@@ -1332,6 +1367,19 @@ namespace BotTest.Game.AI.Brains
             var enemySpells = await GetEnemySpellCardsAsync();
             var cards = context.StateData.SelectableCards ?? Array.Empty<DynamicCard>();
 
+            // Every chain window with something to answer: what was offered and what's attacking (2026-10-21: four set
+            // traps stayed down against two direct attacks and the log had no line at all for those windows).
+            if (cards.Length > 0)
+            {
+                var enemySide = CurrentField.EnemySide;
+                string attack = enemySide.HasBattlingMonster
+                    ? $", attacking: {enemySide.BattlingMonster.ID}:{enemySide.BattlingMonster.Attack}" +
+                      (CurrentField.OwnSide.HasBattlingMonster ? $" into {CurrentField.OwnSide.BattlingMonster.ID}" : " directly")
+                    : "";
+                Log($"Chain window (turn {CurrentHeader.CurrentTurn}, {(DuelPhase)CurrentHeader.CurrentPhase}, LastChainPlayer={CurrentHeader.LastChainPlayer}, " +
+                    $"LP {CurrentField.OwnSide.LifePoints}{attack}): offered [{DescribeIds(cards)}], theirs [{DescribeCards(enemyMonsters)}]");
+            }
+
             for (int i = 0; i < cards.Length; i++)
             {
                 if (await ShouldChain(cards[i], enemyMonsters, enemySpells))
@@ -1345,6 +1393,8 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
+            if (cards.Length > 0)
+                Log("Chain window: passing");
             Chain.MarkPassed();
             Chain.SnapshotEnemyBanish(CurrentField.EnemySide.Banish);
             SnapshotEnemyMonsters(enemyMonsters);
@@ -1566,7 +1616,7 @@ namespace BotTest.Game.AI.Brains
                 return false;
             }
 
-            return card.ID switch
+            bool use = card.ID switch
             {
                 DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints) && !StrongerAttackerWaiting(attacker, enemyMonsters, lifePoints),
                 MirrorForce => attacker.HasValue && (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
@@ -1577,6 +1627,9 @@ namespace BotTest.Game.AI.Brains
                 BookOfMoon => UseBookOfMoonOnAttacker(attacker, enemyMonsters),
                 _ => true
             };
+            if (!use)
+                Log($"Not chaining {card.ID}: its own condition fails (attacker {(attacker.HasValue ? $"{attacker.Value.ID}:{attacker.Value.Attack}" : "none")}, LP {lifePoints})");
+            return use;
         }
 
         // Is the opponent special summoning right now, as far as we can tell? The API doesn't say which card started
@@ -2017,7 +2070,10 @@ namespace BotTest.Game.AI.Brains
         {
             // Diagnostic: confirms the controller convention of the selection data (1 = opponent).
             Log($"Target options ({(DHint)state.SelectionHint}): " + string.Join(" ", selectable.Select(card =>
-                $"{card.ID}@c{card.CurrentCoordinates.Controller}/l{card.CurrentCoordinates.Location}/s{card.CurrentCoordinates.Sequence}")));
+                $"{card.ID}@c{card.CurrentCoordinates.Controller}/l{card.CurrentCoordinates.Location}/s{card.CurrentCoordinates.Sequence}")) +
+                // Their whole field next to the options: shows which cards the engine left out (2026-10-17: Brionac
+                // wasn't offered Turbo Warrior).
+                $" | their field [{DescribeCards(await GetEnemyMonsterCardsAsync())}] [{DescribeCards(await GetEnemySpellCardsAsync())}]");
 
             if (_preferredTarget.HasValue)
             {
