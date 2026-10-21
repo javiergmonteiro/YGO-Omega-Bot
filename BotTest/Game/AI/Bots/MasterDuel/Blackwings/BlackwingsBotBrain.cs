@@ -165,7 +165,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                 (monsterTargets.Any(card => ThreatScore(card) >= 2500) || board.EnemySpells.Any(card => card.IsFaceup()) ||
                  // or only their set backrow is in the way (same condition that picks Brionac over Goyo)
                  (board.EnemySpells.Any(card => !card.IsFaceup()) && monsterTargets.All(card => !card.IsFaceup() || card.GetRealPower() < 1900))),
-            DarkArmedDragon => monsterTargets.Count + board.EnemySpells.Count > 0,
+            // Tokens aren't worth a banish from the GY.
+            DarkArmedDragon => monsterTargets.Count(card => (card.Type & CardKnowledge.TokenType) == 0) + board.EnemySpells.Count > 0,
             DarkEndDragon or BlackwingArmorMaster => monsterTargets.Count > 0,
             SiroccoTheDawn => board.IsMain1 && !_synchroAvailable && MarkSiroccoUsed(SiroccoPumpTarget(board.OwnMonsters, board.EnemyMonsters)),
             _ => true
@@ -196,6 +197,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                     }
                     Log($"Special summon from hand: {cardId}");
                     return card.SpecialSummon();
+                }
+            }
+
+            // Gale halves their monster before it goes into a synchro (Javier, 2026-10-21: Gale became Dark End
+            // material with its effect unused).
+            if (IsBotTurn && ownMonsters.Any(card => card.IsCode(GaleTheWhirlwind) && card.IsFaceup()))
+            {
+                bool fortressOk = await IsFortressTargetWorthItAsync(hand);
+                var galeTargets = board.EnemyMonsters.Where(card => !IsFortressTrap(card, fortressOk)).ToList();
+                if (CanUseMonsterEffect(GaleTheWhirlwind, board, galeTargets) &&
+                    TryActivate(state, GaleTheWhirlwind, board.StardustBlocking, out var gale))
+                {
+                    Log("Gale's effect before the synchro");
+                    return gale;
                 }
             }
 
@@ -239,7 +254,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             // Blizzard without a revive target is still a 1300 body: better than passing with an empty board,
             // as long as nothing face-up on their side beats it.
             // Not when Kalut can be the body instead: tuners are scarcer and wait, and Blizzard can revive Kalut later.
+            // Only when we need a blocker (3000 LP or less): otherwise Blizzard waits
+            // for a revive target (Javier, 2026-10-19: Blizzard down on an empty field, Stratos took it next turn).
             bool blizzardAsBody = ownMonsters.Count == 0 && !blizzardHasTarget && enemyBestPower < 1300 &&
+                CurrentField.OwnSide.LifePoints <= 3000 &&
                 TryGetSummonable(state, BlizzardTheFarNorth, out _) &&
                 !TryGetSummonable(state, KalutTheMoonShadow, out _) && !TryGetMonsterSettable(state, KalutTheMoonShadow, out _);
 
@@ -287,10 +305,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
                 // Weaker than what they have and not a tuner we need: set it, unless the face-up summon is covered.
                 // A face-up Normal Summon triggers Black Whirlwind (Kalut search), and Kalut / set traps protect it.
+                // Traps in hand count: they're set in Main Phase 2 anyway, and waiting for them pushed every summon
+                // to Main Phase 2 with no attack (2026-10-19).
+                int trapsToSet = (state.SpellSetableCards ?? Array.Empty<DynamicCard>())
+                    .Count(s => s.CurrentCoordinates.Location == (byte)CardLocation.Hand && s.HasType(CardType.Trap));
                 bool summonIsCovered =
                     whirlwindsUp > 0 ||
                     hand.Any(h => h.IsCode(KalutTheMoonShadow)) ||
-                    board.OwnSpells.Count(s => !s.IsFaceup()) >= 2;
+                    board.OwnSpells.Count(s => !s.IsFaceup()) + trapsToSet >= 2;
                 if (card.Attack < enemyBestPower && !summonIsCovered && !card.HasType((CardType)CardKnowledge.TunerType))
                 {
                     // Face-down only helps if its DEF survives their strongest attacker; otherwise it just dies there.

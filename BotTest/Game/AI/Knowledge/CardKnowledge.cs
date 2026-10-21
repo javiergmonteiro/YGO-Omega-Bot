@@ -105,6 +105,9 @@ namespace BotTest.Game.AI.Knowledge
             "Blackwing - Shura", "Blackwing - Blizzard",
         };
 
+        // Banish themselves and come back by their own effect in the owner's Standby Phase (a special summon).
+        public static readonly string[] ReturnFromBanishInStandby = { "Drill Warrior" };
+
         // and spells/traps that special summon.
         public static readonly string[] SpecialSummonSpellTraps =
         {

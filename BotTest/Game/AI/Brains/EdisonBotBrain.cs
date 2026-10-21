@@ -500,7 +500,12 @@ namespace BotTest.Game.AI.Brains
             if (IsBotTurn && board.IsMain1 && TryActivate(state, TrapDustshoot, board.StardustBlocking, out var response))
                 return Result(response);
 
-            if (TryActivate(state, UpstartGoblin, board.StardustBlocking, out response))
+            // Upstart gives them 1000 LP: in Main Phase 1, with enough damage on board to finish them, it waits for Main Phase 2.
+            bool upstartBreaksLethal = IsBotTurn && board.IsMain1 && board.OwnMonsters
+                .Where(card => card.IsFaceup() && card.IsAttack()).Sum(card => card.Attack) >= CurrentField.EnemySide.LifePoints;
+            if (upstartBreaksLethal)
+                LogOnChange("Upstart Goblin waits: our attackers could finish them");
+            else if (TryActivate(state, UpstartGoblin, board.StardustBlocking, out response))
                 return Result(response);
 
             if (board.Hand.Any(card => card.ID != AllureOfDarkness && card.HasType(CardType.Monster) && (card.Attribute & DarkAttribute) != 0) &&
@@ -630,14 +635,24 @@ namespace BotTest.Game.AI.Brains
         // each one already wins: nothing set on their side (no Mirror Force / Torrential on the materials) and every
         // monster of theirs is beaten by our weakest attacker (2026-10-16: Armor Master in Main Phase 1
         // dealt nothing and left a token; Bora piercing + Gale on the tokens first was 1700 and a clean field).
-        protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board)
+        protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board, List<DynamicCard> synchroOptions)
         {
             if (!IsBotTurn || !board.IsMain1 || !state.CanBattlePhase || board.EnemySpells.Any(card => !card.IsFaceup()))
                 return false;
 
             var attackers = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).ToList();
-            if (attackers.Count == 0 || board.EnemyMonsters.Count == 0)
+            if (attackers.Count == 0)
                 return false;
+
+            // Cyber Valley ends the Battle Phase when attacked: the synchro comes first (2026-10-19: Gale attacked it
+            // and Dark End came out in Main Phase 2 with no damage dealt).
+            if (board.EnemyMonsters.Any(card => card.IsFaceup() && CardIdentity.NameOf(card.ID) == "Cyber Valley"))
+                return false;
+
+            // Empty field: the materials hit directly, as long as together they hit at least as hard as the synchro
+            // (Javier, 2026-10-19: synchro in Main Phase 1 into an empty field).
+            if (board.EnemyMonsters.Count == 0)
+                return attackers.Sum(card => card.Attack) >= synchroOptions.Select(card => card.Attack).DefaultIfEmpty(0).Max();
 
             var weakest = attackers.OrderBy(card => card.Attack).First();
             return board.EnemyMonsters.All(enemy => enemy.IsFaceup() && GetAttackScore(weakest, enemy) > 0);
@@ -688,7 +703,7 @@ namespace BotTest.Game.AI.Brains
             if (options.Count == 0)
                 return false;
 
-            if (ShouldAttackBeforeSynchro(state, board))
+            if (ShouldAttackBeforeSynchro(state, board, options))
             {
                 LogOnChange("Synchro waits for Main Phase 2: the materials attack first");
                 return false;
@@ -1354,9 +1369,16 @@ namespace BotTest.Game.AI.Brains
                 enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(HeavyStorm));
 
             // Solemn negating a spell destroys nothing, so Stardust can't stop it.
+            // Mirror Force on Stardust's own attack still works: negating it tributes Stardust, so the attack is gone
+            // (2026-10-21: Mirror Force stayed set while Stardust and Tytannial hit for 5300).
+            bool stardustAttacking = !IsBotTurn && incoming.HasBattlingMonster && incoming.BattlingMonster.IsCode(StardustDragon) &&
+                !CurrentField.OwnSide.HasBattlingMonster;
             if (!lethalIncoming && IsStardustBlocking(enemyMonsters, ownSpells, hand) && card.IsCode(DestructionCards) &&
-                !(theirStormResolving && card.IsCode(SolemnJudgment)))
+                !(theirStormResolving && card.IsCode(SolemnJudgment)) && !(stardustAttacking && card.IsCode(MirrorForce)))
+            {
+                LogOnChange($"Not chaining {card.ID}: Stardust would negate it");
                 return false;
+            }
 
             UpdateTrapStun(enemySpells);
             if (TrapsStunned && card.HasType(CardType.Trap))
@@ -1385,7 +1407,10 @@ namespace BotTest.Game.AI.Brains
             }
 
             if (IsTargetingCard(card.ID) && IsTargetingBlocked(enemyMonsters))
+            {
+                LogOnChange($"Not chaining {card.ID}: their targeting protection (Tytannial) would negate it");
                 return false;
+            }
 
             int lifePoints = CurrentField.OwnSide.LifePoints;
             bool stardustInEnemyGrave = (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, StardustDragon));
@@ -1586,6 +1611,17 @@ namespace BotTest.Game.AI.Brains
                 var spell = enemySpells.FirstOrDefault(s => s.IsFaceup() && Named(s, SpecialSummonSpellTraps));
                 if (spell.ID != 0)
                     return $"{spell.ID} special summons";
+
+                // Their Standby Phase with Drill Warrior banished: the chain is its return (2026-10-19: Oppression let it
+                // through and flipped on the summon window after, when there was nothing left to negate).
+                if ((DuelPhase)header.CurrentPhase == DuelPhase.Standby)
+                {
+                    int returning = (CurrentField.EnemySide.Banish ?? Array.Empty<int>()).FirstOrDefault(id =>
+                        CardIdentity.NameOf(id) is string name &&
+                        ReturnFromBanishInStandby.Any(n => name.StartsWith(n, StringComparison.OrdinalIgnoreCase)));
+                    if (returning != 0)
+                        return $"{returning} returns from banishment";
+                }
             }
             return null;
         }
@@ -2027,6 +2063,8 @@ namespace BotTest.Game.AI.Brains
                 // Monsters marked when deciding to chain (the synchro pair Icarus breaks up) go first.
                 .OrderByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
                     priorityTargets.Any(p => p.CurrentCoordinates.Sequence == x.Card.CurrentCoordinates.Sequence))
+                // Tokens last: Dark Armed Dragon took two Fluff Tokens and left the set backrow (2026-10-21).
+                .ThenBy(x => (x.Card.Type & TokenType) != 0)
                 // Single-target removal on monsters keeps going for the biggest monster threat; multi-target removal
                 // (Icarus) takes the most valuable cards, backrow included.
                 .ThenByDescending(x => state.Minimum >= 2 ? 0 : (x.Card.CurrentCoordinates.Location == preferredLocation ? 1 : 0))
@@ -2262,7 +2300,7 @@ namespace BotTest.Game.AI.Brains
         //   cost      = value of the best card in hand (they pick what we lose)
         //   necessity = 3 if none of our monsters beats it in battle (counting battle boosts in hand)
         //             + 2 if it's dangerous (we have no monsters, or two hits kill us)
-        private static bool IsFortressTrap(DynamicCard card, bool fortressIsNecessary) =>
+        protected static bool IsFortressTrap(DynamicCard card, bool fortressIsNecessary) =>
             card.IsCode(PunishesMonsterTargeting) && card.IsFaceup() && !fortressIsNecessary;
 
         protected async Task<bool> IsFortressTargetWorthItAsync(List<DynamicCard> hand)

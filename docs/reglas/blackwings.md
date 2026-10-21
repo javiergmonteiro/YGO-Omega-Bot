@@ -86,14 +86,15 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 **Regla del punto 7: monstruo débil o guardado** (se aplica a cada candidato de la prioridad en orden).
 - Sirocco solo si no tenés monstruos propios.
 - Contra Gladiator Beast: si ya tenés un monstruo boca arriba, se guarda Shura y Sirocco en mano (salvo que el rival tenga letal en mesa). Espera a Bestiari.
-- Si el ATK del monstruo es menor que el mejor poder boca arriba del rival, y no está "cubierto", y no es tuner: no se baja boca arriba. "Cubierto" = hay un Black Whirlwind boca arriba, o tenés Kalut en mano, o tenés 2+ trampas/magias seteadas propias.
+- Si el ATK del monstruo es menor que el mejor poder boca arriba del rival, y no está "cubierto", y no es tuner: no se baja boca arriba. "Cubierto" = hay un Black Whirlwind boca arriba, o tenés Kalut en mano, o entre trampas/magias seteadas y **trampas en la mano para setear** suman 2+. Las de la mano cuentan porque los sets van en Main 2 igual: antes todo se invocaba en Main 2 sin atacar.
   - Lo setea si su DEF es mayor que el mejor ataque (en posición de ataque) del rival y se puede setear.
   - Si no, y el rival tiene letal en mesa, lo setea igual como bloqueador.
   - Si no, se queda en mano y pasa al siguiente.
 - Si no se cumple la condición de "débil", lo baja boca arriba.
 
 **Regla del punto 8: Blizzard como cuerpo.**
-- Solo si: no tenés monstruos, Blizzard no tiene objetivo en el cementerio, ningún monstruo boca arriba del rival tiene poder 1300 o más, Blizzard está invocable, y Kalut no se puede invocar ni setear (porque Kalut es mejor cuerpo: los tuners escasean y Blizzard puede revivirlo después).
+- **Solo si necesitás un bloqueador: 3000 LP o menos.** Si no, Blizzard se guarda para cuando tenga algo que revivir.
+- Además: no tenés monstruos, Blizzard no tiene objetivo en el cementerio, ningún monstruo boca arriba del rival tiene poder 1300 o más, Blizzard está invocable, y Kalut no se puede invocar ni setear (porque Kalut es mejor cuerpo: los tuners escasean y Blizzard puede revivirlo después).
 - Se evalúa recién después de la prioridad normal, o sea que si algo de la lista de normal summon se baja primero, esto no ocurre.
 
 **Regla del punto 9: Vayu.**
@@ -144,6 +145,7 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 - Invocación especial desde la mano (si hay un Blackwing en campo), después de Bora.
 - Es tuner nivel 3 (1300 ATK): se usa como base de los synchros 7 y 8 (con Shura/Bora, con Sirocco).
 - Su efecto (cortar ATK y DEF a la mitad) se usa en la Main Phase si hay un monstruo del rival boca arriba con ATK o DEF mayor que 0 ("vale la pena": un monstruo 0/0 no vale).
+- **Antes de ir a un synchro, usa el efecto.** Si no, Gale pasa a ser material con el efecto sin usar. Con el monstruo a la mitad, el puntaje del synchro puede cambiar (por ejemplo, un Goyo que ahora sí le gana).
 **Cuándo no**
 - No hay condición de "mi monstruo gana por eso"; cualquier monstruo rival boca arriba con stats vale.
 - Se evalúa antes de DAD, Sirocco, etc. en la lista de efectos de monstruo (tercero, después de Armor Master y Dark End).
@@ -158,7 +160,7 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 ### Blizzard the Far North
 **Cuándo se juega**
 - Invocación normal si hay algo para revivir en el cementerio (Shura, Bora, Kalut, Gale, Vayu).
-- Sin objetivo: como cuerpo, solo si campo vacío y el rival no tiene nada de 1300+ boca arriba, y Kalut no es invocable ni seteable (punto 8).
+- Sin objetivo: como cuerpo solo si tenés 3000 LP o menos y necesitás un bloqueador, con campo vacío, el rival sin nada de 1300+ boca arriba, y Kalut no invocable ni seteable (punto 8).
 - Con un monstruo robado: se usa como invocación normal para armar synchro (nivel 2 + nivel del robado debe ser nivel de synchro).
 **Cuándo no**
 - Nunca entra en la invocación genérica (la baja solo este código).
@@ -230,7 +232,7 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 
 ### Dark Armed Dragon
 **Cuándo se juega**
-- Efecto en el campo: se activa si hay al menos 1 objetivo (monstruo del rival no-Fortress, o carta mágica/trampa del rival).
+- Efecto en el campo: se activa si hay al menos 1 objetivo (monstruo del rival que no sea Fortress ni token, o carta mágica/trampa del rival). Los tokens no valen un destierro del cementerio.
 - Es la primera invocación especial desde la mano (el juego la ofrece cuando hay exactamente 3 DARK en el cementerio).
 **Cuándo no**
 - No se invoca de especial si Stardust Dragon está bloqueando y la única carta del rival (monstruos + mágicas/trampas) es esa.

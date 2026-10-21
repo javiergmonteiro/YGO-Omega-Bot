@@ -56,7 +56,8 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 
 **Espera a la Main 2 para que los materiales ataquen primero.**
 - Cuándo: es nuestra Main 1 con batalla disponible, el rival no tiene cartas seteadas, y nuestro atacante más débil le gana a cada monstruo suyo.
-- Si el rival no tiene monstruos, no espera: hace el synchro.
+- **Si el rival no tiene monstruos:** los materiales pegan directo primero, siempre que juntos peguen al menos lo mismo que el synchro más fuerte disponible. El synchro sale en Main 2.
+- **Contra Cyber Valley boca arriba, nunca espera:** atacarla termina la Battle Phase, así que el synchro va primero.
 
 **Elige el synchro según el campo.** El orden del mazo solo desempata:
 - **Goyo:** si hay algo que le gane en batalla y valga robar (no tokens).
@@ -144,7 +145,8 @@ Antes de mirar la ficha de cada carta, el bot aplica estos filtros en orden:
    - "Destrucción" incluye Mirror Force, Icarus, Heavy Storm, MST, Bottomless, Solemn y Royal Oppression (además de DAD y Black Rose). Prison, Book of Moon, Brain Control, Starlight Road y Dustshoot se usan igual.
    - Se levanta si tenemos Royal Oppression en el campo (con más de 800 de vida) o D.D. Crow en la mano.
    - ⚠ Solemn figura como destrucción aunque negar no destruye: con Stardust activo no niega invocaciones ni efectos.
-   - Excepciones: el ataque letal, y Solemn negando un Heavy Storm (negar no destruye).
+   - Excepciones: el ataque letal, Solemn negando un Heavy Storm (negar no destruye), y **Mirror Force contra el ataque de la propia Stardust** (para negarla, Stardust se tributa y el ataque se cae).
+   - Cuando la guarda por Stardust o por Tytannial, ahora lo deja en el log.
 3. **Trap Stun resuelto este turno:** no activa más trampas.
 4. **Tytannial con una Planta para tributar:** no usa cartas que apuntan.
    - Las que además cuestan otra carta (tributo, descarte) tampoco con cualquier Tytannial activa.
@@ -165,6 +167,7 @@ Antes de mirar la ficha de cada carta, el bot aplica estos filtros en orden:
 ## Selecciones
 
 - **A qué apunta** con remoción: primero el objetivo elegido al decidir la cadena (por ejemplo, el atacante para Book of Moon, o el par tuner + no-tuner para Icarus).
+  - **Los tokens van últimos** (Dark Armed Dragon se llevó dos Fluff Tokens y dejó el backrow seteado).
   - Después, en una sola carta, la mayor amenaza en monstruos.
   - En remoción múltiple (Icarus), las cartas más valiosas, incluido el campo de magias. Prefiere el campo de magias si ninguno de sus monstruos le gana al nuestro y tiene 2 o más seteadas.
   - Nunca una magia normal o trampa normal que ya está resolviendo.
@@ -307,6 +310,7 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 
 **Se activa contra un ataque si:** hay atacante y se cumple una de estas tres: el rival tiene 2 o más monstruos en posición de ataque, o el atacante tiene 1800 ATK o más, o el ataque es letal.
 - Bloqueada con Stardust activo salvo lethal/Oppression/Crow. Un Mirror Force es de destrucción.
+- **Excepción: cuando el que ataca es la propia Stardust, se activa.** Si Stardust la niega, se tributa y su ataque se cae.
 - No se encadena un segundo si ya respondimos la cadena.
 
 **Si vimos una Mirror Force en su mano:** solo atacamos con un monstruo por batalla si ellos tienen backrow seteado y todavía queda una copia posible (banlist). Una vez que ya atacó uno, pasa a Main 2 o End.
@@ -336,6 +340,7 @@ Código: `ShouldChain` (bloque de Gladiator Beasts y tabla final)
   - **Ventana de invocación** (sin cadena del rival) con un monstruo nuevo que solo entra por invocación especial: del Extra Deck, o de los que se invocan solos desde la mano (Quickdraw, Cyber Dragon, Gorz, Tragoedia, Cyber Valley, Chaos Sorcerer, BLS, DAD, Judgment Dragon, Machina Fortress).
   - La API no dice si fue normal o especial. Si en esa misma ventana un monstruo del rival dejó el campo, fue un tributo: Machina Fortress, Cyber Dragon, Gorz, Tragoedia y Quickdraw se toman como invocación por tributo y no se da vuelta.
   - **Cadena del rival** mientras controla un monstruo cuyo efecto invoca (Lonefire, Debris Dragon, Dandylion, Plaguespreader, Gladiator Beasts, Shura, Blizzard), o con una magia/trampa boca arriba que invoca (Monster Reborn, Call of the Haunted, Premature Burial, Scapegoat, Future Fusion).
+  - **Cadena del rival en su Standby Phase con Drill Warrior desterrado:** es su vuelta al campo, así que se niega ahí. Antes la dejaba pasar y se daba vuelta en la ventana de invocación, cuando ya no había nada que negar.
 - Si no, se queda boca abajo. Cada vez que se la ofrece, el log muestra la ventana (LastChainPlayer, LastSummonPlayer, monstruos nuevos) y la decisión, para revisar casos raros.
 - ⚠ Es una deducción: si el rival tiene un Lonefire en el campo y activa otra cosa, igual se da vuelta.
 - Con el Heavy Storm del rival resolviéndose, no se encadena (le quita la cadena a Solemn).
@@ -473,8 +478,8 @@ Código: `DecideGenericOpeningAsync`, `DecideSelectCardCoreAsync` (REMOVE desde 
 
 ### Upstart Goblin
 
-**Se juega siempre que el juego lo ofrece en Main.** Sin condiciones. Valor de mano 1, así que se descarta primero.
-- ⚠ No se mira nada del rival (le da 1000 LP): es una regla sin gating. (no está claro en el código si es deliberado)
+**Se juega siempre que el juego lo ofrece en Main, salvo que le rompa un lethal.** Valor de mano 1, así que se descarta primero.
+- **En nuestra Main 1, si nuestros monstruos en ataque suman lo que le queda de vida al rival, espera a la Main 2** (le da 1000 LP).
 
 Código: `DecideGenericOpeningAsync`
 
