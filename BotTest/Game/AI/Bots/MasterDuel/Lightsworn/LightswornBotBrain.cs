@@ -283,6 +283,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (CanUseMonsterEffect(CardTrooper, board, board.EnemyMonsters) && TryActivate(state, CardTrooper, false, out var trooper))
                 return trooper;
 
+            if (TrySynchroSummon(state, board, out var synchro))
+                return synchro;
+
+            // Plaguespreader back from the GY (a card from hand goes on top of the deck) for a synchro that pays off now.
+            if (GraveCopies(Plaguespreader) > 0 && hand.Count > 0 && PlaguespreaderPlan(board) &&
+                TryActivate(state, Plaguespreader, false, out var plague))
+            {
+                Log("Plaguespreader from the GY for a synchro");
+                return plague;
+            }
+
             var summon = DecideNormalSummon(state, board);
             if (summon.HasValue)
                 return summon;
@@ -347,8 +358,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return destruction;
             }
 
-            if (CanMill(2, board) && TryActivate(state, FoolishBurial, false, out var foolish))
+            // Foolish only with a clear plan for this turn (Javier).
+            string? foolishPlan = FoolishPlan(board);
+            if (foolishPlan != null && TryActivate(state, FoolishBurial, false, out var foolish))
             {
+                Log($"Foolish Burial: {foolishPlan}");
                 _pendingEffect = FoolishBurial;
                 return foolish;
             }
@@ -729,6 +743,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 }
             }
 
+            // Plaguespreader's cost: a card from hand on top of the deck. Wulf first: the next mill sends it to the GY
+            // and it summons itself.
+            if (All(CardLocation.Hand) && hint == DHint.TODECK)
+                return Picked("On top of the deck", PickInOrder(state, new[] { Wulf, Plaguespreader, NecroGardna }), selectable);
+
             // Charge of the Light Brigade's search.
             if (All(CardLocation.Deck) && hint == DHint.ATOHAND)
                 return Picked("Charge search", PickInOrder(state, ChargeSearchOrder(board)), selectable);
@@ -866,18 +885,84 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return order.ToArray();
         }
 
-        // Foolish: Gardna to protect a Lightsworn for Celestia's tribute next turn, then Wulf (it summons itself from
-        // the deck), then a name the GY is missing.
+        private bool GardnaPlan(Board board) =>
+            InHand(board.Hand, Celestia) && board.OwnMonsters.Any(card => card.IsFaceup() && card.IsCode(LightswornMonsters));
+
+        private bool PlaguespreaderFoolishPlan(Board board) =>
+            GraveCopies(Plaguespreader) == 0 && !InHand(board.Hand, Plaguespreader) &&
+            board.Hand.Count(card => !card.IsCode(FoolishBurial)) > 0 && PlaguespreaderPlan(board);
+
+        // The missing name only when it's the 4th and Judgment Dragon comes down this same turn.
+        private bool MissingNamePlan(Board board) =>
+            InHand(board.Hand, JudgmentDragon) && GraveNames() == 3 && JudgmentCanLand(board);
+
+        private string? FoolishPlan(Board board)
+        {
+            if (!CanMill(1, board))
+                return null;
+            if (GardnaPlan(board))
+                return "Necro Gardna, protects a Lightsworn for Celestia's tribute";
+            if (PlaguespreaderFoolishPlan(board))
+                return "Plaguespreader for a synchro this turn";
+            if (MissingNamePlan(board))
+                return "the 4th name, Judgment Dragon comes down this turn";
+            return null;
+        }
+
+        // Foolish: the plan that made us activate it, then the fallbacks.
         private int[] FoolishOrder(Board board)
         {
             var order = new List<int>();
-            if (InHand(board.Hand, Celestia) && board.OwnMonsters.Any(card => card.IsFaceup() && card.IsCode(LightswornMonsters)))
+            if (GardnaPlan(board))
                 order.Add(NecroGardna);
-            order.Add(Wulf);
-            order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0));
-            order.AddRange(new[] { NecroGardna, Plaguespreader });
+            if (PlaguespreaderFoolishPlan(board))
+                order.Add(Plaguespreader);
+            order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
+            order.AddRange(new[] { Wulf, NecroGardna, Plaguespreader });
             order.AddRange(LightswornMonsters);
             return order.ToArray();
+        }
+
+        // Judgment Dragon would come down now (same checks as the summon itself).
+        private bool JudgmentCanLand(Board board)
+        {
+            bool lastResort = OpponentHasLethal(board);
+            return IsBotTurn && (!SummonTrapPossible(board) || lastResort) && !OppressionStopsOurSpecialSummons(board) &&
+                (CanMill(4, board) || lastResort);
+        }
+
+        // Synchros in our Extra Deck: level and ATK (Plaguespreader is a level 2 tuner).
+        private static readonly Dictionary<int, (int Level, int Attack)> Synchros = new()
+        {
+            [StardustDragon] = (8, 2500), [GoyoGuardian] = (8, 2800), [RedDragonArchfiend] = (8, 3000),
+            [ThoughtRulerArchfiend] = (8, 2700), [ColossalFighter] = (8, 2800), [XSaberUrbellum] = (7, 2200),
+            [BrionacDragonOfTheIceBarrier] = (6, 2300), [MagicalAndroid] = (6, 2400), [TempestMagician] = (6, 2200),
+            [AllyOfJusticeCatastor] = (5, 2200), [MistWurm] = (9, 2500), [ArmoryArm] = (4, 1800),
+        };
+
+        // Plaguespreader + one of our face-up monsters into a synchro that pays off now: the situational synchro rule
+        // likes it (Goyo steals, Catastor breaks a non-DARK, Brionac bounces, Android heals at low LP...) or it gives
+        // lethal. Only when no set card of theirs may be Bottomless / Torrential (Javier).
+        private bool PlaguespreaderPlan(Board board)
+        {
+            if (!IsBotTurn || SummonTrapPossible(board) || OppressionStopsOurSpecialSummons(board))
+                return false;
+
+            int ourAttack = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).Sum(card => card.Attack);
+            foreach (var material in board.OwnMonsters.Where(card => card.IsFaceup() && !card.HasType((CardType)CardKnowledge.TunerType)))
+            {
+                foreach (var (synchro, stats) in Synchros.Where(x => x.Value.Level == material.Level + 2).Select(x => (x.Key, x.Value)))
+                {
+                    if (ScoreSynchro(synchro, board) > 30)
+                        return true;
+                    int materialAttack = material.IsAttack() && !material.Attacked ? material.Attack : 0;
+                    bool lethal = board.IsMain1 && board.EnemyMonsters.Count == 0 &&
+                        ourAttack - materialAttack + stats.Attack >= CurrentField.EnemySide.LifePoints;
+                    if (lethal)
+                        return true;
+                }
+            }
+            return false;
         }
 
         // Pot of Avarice: repeated copies first, then the other monsters (Judgment Dragon can go back too), keeping

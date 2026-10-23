@@ -88,7 +88,7 @@ namespace BotTest.Decks
                 MasterDuelDeck.Lightsworn,
                 (
                     DeckName: "Lightsworn",
-                    DeckHash: "M+c/Y/6Y9fekQmYQLspZwvReeQErDD8ya2GGYa/+Fmb5/D2snRaRjCB8S3YRU99zezA+ODuXIdp1I6vtXS8GlWAhVr3PfxkTpD3g2NIhgqXr5nLWoytvsZS4azOqvWZggeGrfVwMMCx0cwHTwqtacNxvfJs56NMOlowzCxivP7ZkcerMZPzOYsHSu1mFZZ/ycqbt+5NYwqKOsbw5UcAw4+Z/ps+3DzFfZZrGZHNqKuOP6bsZjSbqsoAwyK1+30sZQfhmuDzLnmYbJnY5RRYQfq8eyLD11BTma0cvMILwbglBZhAGAA=="
+                    DeckHash: "M+c/Y/6Y9fekQmYQLspZwvReeQErDD8ya2GGYa/+Fmb5/D2snRaRjCB8S3YRU99zezA+ODuXIdp1I6vtXS8GlWAhVr3PfxkTpD3gWE28jKXr5nLWoytvsZS4azOqvWZggeGrfVwMMCx0cwHTwqtacNxvfJs56NMOlowzCxivP7ZkcerMZPzOYsHSu1mFZZ/ycqbt+5NYwqKOsbw5UcAw4+Z/ps+3DzFfZZrGZHNqKuOP6bsZjSbqsoAwyK1+30sZQfhmuDzLnmYbJnY5RRYQfq8eyLD11BTma0cvMILwbglBZhAGAA=="
                 )
             }
         };

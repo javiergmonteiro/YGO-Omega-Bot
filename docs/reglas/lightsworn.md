@@ -47,8 +47,10 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 9. **Efecto de Lumina.**
 10. **Robo con Tragoedia.**
 11. **Efecto de Card Trooper.**
-12. **Invocación normal** (ver "Prioridad de invocación normal").
-13. **Honest vuelve a la mano** en la Main 2.
+12. **Invocación Synchro** (regla genérica con la lista del mazo).
+13. **Plaguespreader desde el cementerio** para un synchro (ver su ficha).
+14. **Invocación normal** (ver "Prioridad de invocación normal").
+15. **Honest vuelve a la mano** en la Main 2.
 
 ### Cartas en el deck
 
@@ -154,7 +156,7 @@ Código: `DecideSpells`
 
 ### Card Destruction
 
-⚠ Está en el mazo cargado (no está en tu lista escrita, donde figura Monster Reincarnation). Regla propia mientras tanto:
+No está en la lista actual (va Monster Reincarnation), pero la regla queda por si vuelve:
 
 **Se usa cuando al menos la mitad del resto de la mano son cartas que rinden más en el cementerio** (Wulf, Plaguespreader, Necro Gardna), con 2 cartas o más para descartar.
 
@@ -162,13 +164,22 @@ Código: `DecideSpells`
 
 ### Foolish Burial
 
-**Qué manda al cementerio:**
-1. Necro Gardna, si tenés Celestia en mano y un Lightsworn en el campo
-2. Wulf (desde el deck se invoca solo)
-3. Un nombre que falte en el cementerio
-- ⚠ Plaguespreader para un synchro en el mismo turno todavía no está implementado.
+**Solo se usa con un plan para ese turno:**
+1. Necro Gardna, si tenés Celestia en mano y un Lightsworn en el campo.
+2. Plaguespreader, si se cumple su plan de synchro (ver su ficha).
+3. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
+- Si no hay plan, no se usa.
 
-Código: `FoolishOrder`
+Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
+
+### Plaguespreader
+
+**Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
+- Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
+- El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Brionac devuelve una amenaza o la backrow, Magical Android cura con poca vida...) o da lethal.
+- Para revivirlo pone una carta de la mano arriba del deck: Wulf primero (el próximo mill lo manda al cementerio y se invoca solo).
+
+Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 ### Lumina
 

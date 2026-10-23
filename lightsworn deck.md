@@ -26,7 +26,7 @@
 21502816
 21502816
 21502816
-72892473
+74848038
 94886282
 81439173
 19613556
@@ -160,7 +160,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 - Si el rival tiene 2 backrows o más, atacar solo con el token y dejar Gorz en defensa (evaluar también la diferencia de LP).
 
 ### Tragoedia
-- Se baja cuando recibo daño (de batalla o no), idealmente con 5 cartas o más en mano. Siempre en defensa.
+- Se baja cuando recibo daño de batalla, idealmente con 5 cartas o más en mano. Siempre en defensa.
 - Usar siempre su efecto: descartar un monstruo para robar uno del rival del mismo nivel. Es robo permanente.
   - Ejemplos: JD para robar un Stardust, Celestia para robar un Ally of Justice.
   - Se puede descartar cualquier cosa. JD sí, salvo que no tenga 4 nombres o más en el cementerio.
@@ -168,7 +168,8 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 ### Plaguespread Zombie
 - Casi siempre conviene descartarlo, con Monster Reincarnation o Lumina.
-- Con Foolish, solo para hacer synchro ese mismo turno con una jugada clara: un Goyo para robar, o un Brionac si hay backrows que molestan y tengo lethal en campo.
+- Synchro con Plaguespreader (desde Foolish o ya en el cementerio): se puede usar en cualquier situación si el rival no tiene backrow (o lo que ya se vio en su cementerio dice que no le quedan Bottomless / Torrential), siempre que el synchro tenga una probabilidad alta o segura de cumplir su efecto o de ganar la partida.
+  - Ejemplos: Goyo para robar, Brionac si hay backrows que molestan y tengo lethal en campo, Magical Android, Catastor.
 
 ### Pot of Avarice
 - Se usa siempre que se pueda, salvo que me deje sin los 4 nombres para JD. Si tengo poca vida, se usa sí o sí para sobrevivir.
@@ -186,10 +187,11 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 - Se guarda para recuperar JD después de un mill, o para traer a Lumina y seguir moliendo.
 
 ### Foolish Burial
+- Solo se usa con un plan claro para ese turno.
 - **Qué mandar:**
   1. Necro Gardna, si tengo Celestia en mano y un Lightsworn en campo (lo protege para tributarlo al turno siguiente)
   2. Plaguespread, si ese turno hay un synchro claro (ver Plaguespread)
-  3. Un nombre que todavía no esté en el cementerio
+  3. El nombre que falta, si y solo si tengo JD en la mano y lo voy a jugar ese turno. Si no, no.
 
 ### Necro Gardna
 - Otro buen descarte.
