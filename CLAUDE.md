@@ -6,7 +6,7 @@ Bot for YGO Omega (Edison format, Blackwings deck) built on duelbotwrapper. The 
 - Read `docs/API-LIMITATIONS.md`. It lists confirmed YGO Omega API bugs, bot-relative conventions, and framework pitfalls that past rules got wrong. Examples: attacks always use `AttackableCards[0]`, there is no battle replay, revealed hands arrive hidden, errata versions have different IDs, and some perspective helpers are inverted. Add any newly confirmed limitation there.
 - Where the rules live:
   - Generic rules for any deck: `BotTest/Game/AI/Brains/EdisonBotBrain.cs`.
-  - Deck strategy: `BotTest/Game/AI/Bots/MasterDuel/Blackwings/BlackwingsBotBrain.cs`.
+  - Deck strategy: `BotTest/Game/AI/Bots/MasterDuel/Blackwings/BlackwingsBotBrain.cs`, `BotTest/Game/AI/Bots/MasterDuel/Lightsworn/LightswornBotBrain.cs` (Javier's own plan: `lightsworn deck.md`).
   - Card lists and IDs: `BotTest/Game/AI/Knowledge/CardKnowledge.cs`.
 - Javier prefers few, targeted rules (gated by matchup or situation) over broad changes that can break other plays.
 - Compare cards with `IsCode` or `CardIdentity`, never with raw IDs, because errata versions have different IDs.

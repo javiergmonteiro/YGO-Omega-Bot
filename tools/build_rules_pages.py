@@ -20,6 +20,7 @@ TEMPLATE = Path(__file__).with_name("rules_page_template.html")
 # To add a deck: write docs/reglas/<key>.md and add a line here.
 DECKS = [
     ("blackwings", "Blackwings"),
+    ("lightsworn", "Lightsworn"),
 ]
 
 

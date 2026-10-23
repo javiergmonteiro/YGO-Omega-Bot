@@ -4,6 +4,7 @@ using BotTest.Game.AI.Bots.MasterDuel.Blackwings;
 using BotTest.Game.AI.Bots.MasterDuel.DarkMagician;
 using BotTest.Game.AI.Bots.MasterDuel.EdisonGeneric;
 using BotTest.Game.AI.Bots.MasterDuel.HandTraps;
+using BotTest.Game.AI.Bots.MasterDuel.Lightsworn;
 using BotTest.Game.AI.Bots.MasterDuel.SwordSoul;
 using BotTest.Game.AI.Bots.RushDuel.SevensRoad;
 using BotTest.Game.AI.Bots.SpeedDuel.Amazoness;
@@ -25,6 +26,7 @@ public static class DeckCatalog
         CreateBrain("MasterDuel", "Master Duel", MasterDuelDeck.SwordSoul.ToString(), DeckManager.GetDeckName(MasterDuelDeck.SwordSoul), DeckManager.GetDeckHash(MasterDuelDeck.SwordSoul), () => new SwordSoulBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
         CreateBrain("MasterDuel", "Master Duel", MasterDuelDeck.HandTraps.ToString(), DeckManager.GetDeckName(MasterDuelDeck.HandTraps), DeckManager.GetDeckHash(MasterDuelDeck.HandTraps), () => new HandTrapsBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
         CreateBrain("MasterDuel", "Master Duel", MasterDuelDeck.Blackwings.ToString(), DeckManager.GetDeckName(MasterDuelDeck.Blackwings), DeckManager.GetDeckHash(MasterDuelDeck.Blackwings), () => new BlackwingsBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
+        CreateBrain("MasterDuel", "Master Duel", MasterDuelDeck.Lightsworn.ToString(), DeckManager.GetDeckName(MasterDuelDeck.Lightsworn), DeckManager.GetDeckHash(MasterDuelDeck.Lightsworn), () => new LightswornBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
         CreateBrain("SpeedDuel", "Speed Duel", SpeedDuelDeck.SuperDuck.ToString(), DeckManager.GetDeckName(SpeedDuelDeck.SuperDuck), DeckManager.GetDeckHash(SpeedDuelDeck.SuperDuck), () => new SuperDuckBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
         CreateBrain("SpeedDuel", "Speed Duel", SpeedDuelDeck.MachineAngelAscension.ToString(), DeckManager.GetDeckName(SpeedDuelDeck.MachineAngelAscension), DeckManager.GetDeckHash(SpeedDuelDeck.MachineAngelAscension), () => new MachineAngelAscensionBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),
         CreateBrain("SpeedDuel", "Speed Duel", SpeedDuelDeck.Amazoness.ToString(), DeckManager.GetDeckName(SpeedDuelDeck.Amazoness), DeckManager.GetDeckHash(SpeedDuelDeck.Amazoness), () => new AmazonessBotBrain(new WindBotInspiredCardEvaluator(), new DefaultBoardEvaluator())),

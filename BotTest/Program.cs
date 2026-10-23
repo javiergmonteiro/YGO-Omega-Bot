@@ -9,6 +9,7 @@ BotTest.Game.AI.Knowledge.Banlist.Load(Path.Combine(builder.Environment.ContentR
 // IDs our rules know, so alternate artworks (own IDs in Omega, no alias) can be matched to them by name.
 BotTest.Game.AI.Knowledge.CardIdentity.RegisterKnownIds(typeof(BotTest.Game.AI.Knowledge.CardKnowledge));
 BotTest.Game.AI.Knowledge.CardIdentity.RegisterKnownIds(typeof(BotTest.Game.AI.Bots.MasterDuel.Blackwings.BlackwingsCardId));
+BotTest.Game.AI.Knowledge.CardIdentity.RegisterKnownIds(typeof(BotTest.Game.AI.Bots.MasterDuel.Lightsworn.LightswornCardId));
 BotTest.Game.AI.Knowledge.CardIdentity.RegisterKnownIds(BotTest.Game.AI.Knowledge.Banlist.CardIds);
 
 // Logs folder: --logs <path> (the shareable package uses its own "logs" folder), default <repo>/logs.

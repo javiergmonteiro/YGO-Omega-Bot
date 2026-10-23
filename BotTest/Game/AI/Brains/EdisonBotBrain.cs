@@ -245,6 +245,12 @@ namespace BotTest.Game.AI.Brains
         /// <summary>Summonable cards the generic fallback must not normal summon (handled by the deck).</summary>
         protected virtual int[] ExcludedFromGenericSummon => Array.Empty<int>();
 
+        /// <summary>Settable monsters the generic fallback must not set (handled by the deck).</summary>
+        protected virtual int[] ExcludedFromGenericSet => Array.Empty<int>();
+
+        /// <summary>Activable cards the generic fallback must not activate (the deck decides when they're worth it).</summary>
+        protected virtual int[] ExcludedFromGenericActivation => Array.Empty<int>();
+
         /// <summary>ATK we can add in battle from hand (e.g. Kalut), for "can we beat it" checks.</summary>
         protected virtual int BattleBoostInHand(List<DynamicCard> hand) => 0;
 
@@ -438,6 +444,12 @@ namespace BotTest.Game.AI.Brains
             var filtered = state;
             filtered.SummonableCards = (state.SummonableCards ?? Array.Empty<DynamicCard>())
                 .Where(card => !card.IsCode(ExcludedFromGenericSummon))
+                .ToArray();
+            filtered.MonsterSetableCards = (state.MonsterSetableCards ?? Array.Empty<DynamicCard>())
+                .Where(card => !card.IsCode(ExcludedFromGenericSet))
+                .ToArray();
+            filtered.ActivableCards = (state.ActivableCards ?? Array.Empty<DynamicCard>())
+                .Where(card => !card.IsCode(ExcludedFromGenericActivation))
                 .ToArray();
             // Monsters that take no battle damage and can't be destroyed by battle stay in attack position,
             // and so do monsters that destroy what they battle while there are targets for them.

@@ -19,7 +19,8 @@ namespace BotTest.Decks
         DarkMagician,
         SwordSoul,
         HandTraps,
-        Blackwings
+        Blackwings,
+        Lightsworn
     }
 
     /// <summary>
@@ -81,6 +82,13 @@ namespace BotTest.Decks
                 (
                     DeckName: "Blackwings",
                     DeckHash: "M2eMPvCIeT1zAwsMf+1oZIbhI3teM8HwIw8RVhjmXSHHcDI/hhGGZ3SEsoDw+yYxhrAsW9YSd23G/H2GLDB89ds1hvfqgQxeLwtZQThu8QFGEL4XasgCwuVxhswwLHRzAVNnQDfrb5YKpn7j28xBn3awXH9syVKj/pvRqTOT8TuLBcvv6R6s+5SXM7GHyrJs35/E8uZEAYP93KksIDzj5n+mq0zTmGxOTWUEmQMA"
+                )
+            },
+            {
+                MasterDuelDeck.Lightsworn,
+                (
+                    DeckName: "Lightsworn",
+                    DeckHash: "M+c/Y/6Y9fekQmYQLspZwvReeQErDD8ya2GGYa/+Fmb5/D2snRaRjCB8S3YRU99zezA+ODuXIdp1I6vtXS8GlWAhVr3PfxkTpD3g2NIhgqXr5nLWoytvsZS4azOqvWZggeGrfVwMMCx0cwHTwqtacNxvfJs56NMOlowzCxivP7ZkcerMZPzOYsHSu1mFZZ/ycqbt+5NYwqKOsbw5UcAw4+Z/ps+3DzFfZZrGZHNqKuOP6bsZjSbqsoAwyK1+30sZQfhmuDzLnmYbJnY5RRYQfq8eyLD11BTma0cvMILwbglBZhAGAA=="
                 )
             }
         };
