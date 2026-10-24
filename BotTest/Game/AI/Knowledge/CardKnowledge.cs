@@ -145,6 +145,7 @@ namespace BotTest.Game.AI.Knowledge
         public const int DebrisDragon = 14943837;
         public const int DestinyHeroPlasma = 83965310;
         public const int JudgmentDragon = 57774843;
+        public const int KalutMoonShadow = 85215458;
 
         // Gladiator Beasts: Bestiari is the key piece (backrow removal on tag-in, and it makes Gyzarus).
         public const string GladiatorBeastPrefix = "Gladiator Beast";

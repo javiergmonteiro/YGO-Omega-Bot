@@ -465,6 +465,18 @@ Código: `DecideGenericOpeningAsync` (stormEdge), `DecideSets`
 
 Código: `DecideGenericOpeningAsync`, `HasPlanForStolenMonster`, `DecideGenericAttackAsync` (robados)
 
+### Kalut (contra Blackwings)
+
+**No se ataca a un Blackwing boca arriba en ataque si Kalut (+1400) le daría la batalla**: el rival tiene cartas en la mano y le quedan copias de Kalut. Mejor sacarlos 1 a 1 con efectos.
+
+Código: `KalutTurnsIt`
+
+### Book of Moon contra el wipe de Judgment Dragon
+
+**Si el rival activa el efecto de su Judgment Dragon en su Main 1, Book of Moon lo da vuelta en respuesta**: Book se destruiría igual, y boca abajo JD no puede atacar ese turno.
+
+Código: `ShouldChainAsync` (Book of Moon)
+
 ### Judgment Dragon propio o robado
 
 **Si controlás un Judgment Dragon sin regla del mazo (por ejemplo robado con Brain Control), usa su efecto** (1000 LP, destruye todas las demás cartas):

@@ -1246,6 +1246,23 @@ namespace BotTest.Game.AI.Brains
             return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost);
         }
 
+        // Against Blackwings with cards in their hand: Kalut gives a battling Blackwing +1400, so an attack into a face-up
+        // attack-position Blackwing that wins by less loses our monster instead (Javier: clear them 1-for-1 with effects).
+        private bool KalutTurnsIt(DynamicCard attacker, DynamicCard target)
+        {
+            if (!target.IsFaceup() || !target.IsAttack() || IsStolen(attacker) || target.IsDisabled())
+                return false;
+            if (!(CardIdentity.NameOf(target.ID)?.StartsWith("Blackwing", StringComparison.OrdinalIgnoreCase) ?? false))
+                return false;
+            var enemy = CurrentField.EnemySide;
+            bool kalutPossible = (enemy.Hand ?? Array.Empty<int>()).Length > 0 &&
+                CardCounter.OpponentCopiesLeft(KalutMoonShadow, enemy.Grave, enemy.Banish, Array.Empty<int>()) > 0;
+            bool turns = kalutPossible && attacker.Attack <= target.Attack + 1400;
+            if (turns)
+                LogOnChange($"{attacker.ID} doesn't attack {target.ID}: Kalut in their hand would win that battle");
+            return turns;
+        }
+
         // Generic attack choice. Unlike the framework's base logic, negated monsters still count as monsters
         // (with Plasma on our side every opponent monster is negated, and the base logic then saw an empty field).
         private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers,
@@ -1291,6 +1308,7 @@ namespace BotTest.Game.AI.Brains
                 // Destroying Machina Fortress in battle lets it destroy the attacker: not with a monster we need
                 // (2026-10-16: Dark Armed Dragon), unless it's a stolen one.
                 .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]))
+                .Where(x => !KalutTurnsIt(attackers[x.Index], x.Target))
                 .OrderByDescending(x => x.Score)
                 // Every attack-position target scores the same: hit the most dangerous one, not the leftmost
                 // (2026-10-16: Stratos instead of Plasma).
@@ -1621,6 +1639,18 @@ namespace BotTest.Game.AI.Brains
             {
                 Log("Holding Bottomless for Bestiari / Gyzarus");
                 return false;
+            }
+
+            // Their Judgment Dragon wipes the field in their Main Phase: Book of Moon would be destroyed anyway, so flip JD
+            // face-down in response; it can't attack this turn (2026-10-24: Book stayed set and JD hit for 3000).
+            var enemyJudgment = enemyMonsters.FirstOrDefault(monster => monster.IsFaceup() && monster.IsCode(JudgmentDragon) && !monster.IsDisabled());
+            bool judgmentWipe = card.IsCode(BookOfMoon) && !IsBotTurn && enemyJudgment.ID != 0 && CurrentHeader.LastChainPlayer == 1 &&
+                (DuelPhase)CurrentHeader.CurrentPhase == DuelPhase.Main1;
+            if (judgmentWipe)
+            {
+                Log($"Book of Moon on their Judgment Dragon: its wipe destroys Book anyway, face-down it can't attack");
+                _preferredTarget = enemyJudgment;
+                return true;
             }
 
             bool use = card.ID switch

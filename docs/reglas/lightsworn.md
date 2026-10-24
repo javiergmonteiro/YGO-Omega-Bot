@@ -71,7 +71,9 @@ Código: `GraveNames`
 
 ### Prioridad de invocación normal
 
-- Si Lyla puede romper una backrow, va antes que setear Ryko. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
+- Si Lyla puede romper una backrow, va antes que setear Ryko.
+- Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
+- Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
 
 **Primero Ryko boca abajo** (si no hay otro Ryko seteado). Después:
 1. Lyla, si el rival tiene backrow
@@ -144,7 +146,7 @@ Código: `FindTragoediaSteal`
 
 ### Pot of Avarice
 
-**Se usa si después quedan 4 nombres en el cementerio.** Con 15 cartas o menos en el deck, con 2000 LP o menos, o con los 2 JD en el cementerio (vuelven al deck), se usa sí o sí.
+**Se usa si después quedan 4 nombres en el cementerio y hay algo que valga la pena recuperar** (2 o más de: JD, Honest, Gorz, Tragoedia, Celestia, Lumina, Card Trooper). Sí o sí con 15 cartas o menos en el deck, con 2000 LP o menos, con los 2 JD en el cementerio, o si vas muy atrás (3500 LP o más de diferencia y 3 cartas o más de diferencia en el campo).
 - Devuelve en este orden: las copias repetidas, los demás monstruos, JD, una copia de cada nombre y, por último, Necro Gardna y Plaguespreader.
 
 Código: `AvariceKeepsNames`, `AvaricePicks`
@@ -183,7 +185,8 @@ Código: `DecideSpells`
 1. Necro Gardna, si tenés Celestia en mano y un Lightsworn en el campo.
 2. Plaguespreader, si se cumple su plan de synchro (ver su ficha).
 3. Wulf, si tenés 2 Celestia en mano, el rival tiene 2 cartas o más y no hay un Lightsworn en tu campo: Wulf se invoca solo y es el tributo de Celestia, que rompe 2.
-4. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
+4. Plaguespreader para un Goyo (nivel 6) el turno siguiente, si Goyo tiene un buen robo, tenés un Lightsworn nivel 4 y una carta barata para su costo.
+5. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
 - Si no hay plan, no se usa.
 
 Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
@@ -235,7 +238,7 @@ Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 
 ### Card Trooper
 
-**Muele 3 (más chances de Wulf).** Se activa en la Main 1 de tu turno, solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
+**Muele 3 mientras sirva (queda algún Wulf en el deck o faltan nombres para JD); si no, 1.** Se activa en la Main 1 de tu turno, solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
 
 Código: `OnAnnounceNumberAsync`
 

@@ -439,10 +439,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Pot of Avarice: always, unless it takes us below 4 names. With 15 cards or fewer, or low LP, always.
             if (TryGetActivable(state, PotOfAvarice, out _))
             {
-                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2;
-                if ((forced || AvariceKeepsNames()) && TryActivate(state, PotOfAvarice, false, out var avarice))
+                bool farBehind = FarBehind(board);
+                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2 || farBehind;
+                if ((forced || (AvariceKeepsNames() && AvariceWorthIt())) && TryActivate(state, PotOfAvarice, false, out var avarice))
                 {
-                    Log($"Pot of Avarice{(forced ? " (deck low, LP low, or both Judgment Dragons in the GY)" : "")}");
+                    Log($"Pot of Avarice{(farBehind ? " (far behind: 3500+ LP and 3+ cards)" : forced ? " (deck low, LP low, or both Judgment Dragons in the GY)" : "")}");
                     _pendingEffect = PotOfAvarice;
                     return avarice;
                 }
@@ -496,6 +497,23 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         // Pot of Avarice returns 5 monsters. Without breaking the names: the extra copies and the other monsters
         // (Gardna and Plaguespreader stay), plus any names above 4.
+        // Javier: Pot of Avarice only when the GY holds monsters worth having back (Judgment Dragon, Honest, Gorz...);
+        // "no uso pot porque no me interesa recuperar nada".
+        private static readonly int[] WorthRecovering = { JudgmentDragon, Honest, Gorz, Tragoedia, Celestia, Lumina, CardTrooper };
+
+        private bool AvariceWorthIt()
+        {
+            int worth = WorthRecovering.Sum(GraveCopies);
+            if (worth < 2)
+                LogOnChange($"Pot of Avarice waits: nothing worth recovering ({worth} key monster(s) in the GY)");
+            return worth >= 2;
+        }
+
+        // Far behind (Javier): 3500+ LP under them and 3+ cards fewer on the field. Pot of Avarice no matter what.
+        private bool FarBehind(Board board) =>
+            CurrentField.EnemySide.LifePoints - CurrentField.OwnSide.LifePoints >= 3500 &&
+            (board.EnemyMonsters.Count + board.EnemySpells.Count) - (board.OwnMonsters.Count + board.OwnSpells.Count) >= 3;
+
         private bool AvariceKeepsNames()
         {
             int names = GraveNames();
@@ -585,8 +603,31 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return lylaNow.NormalSummon();
             }
 
+            // Going second (Javier): Card Trooper first to clear their monsters; into an empty field on our first turn,
+            // Druid attacks and mills instead of a slow Ryko.
+            bool wentFirst = (IsBotTurn ? CurrentHeader.CurrentTurn : CurrentHeader.CurrentTurn + 1) % 2 == 1;
+            if (!wentFirst && board.EnemyMonsters.Count > 0 && DeckCount > DeckCaution && TryGetSummonable(state, CardTrooper, out var trooperFirst))
+            {
+                Log("Normal summon: Card Trooper (going second, it clears)");
+                return trooperFirst.NormalSummon();
+            }
+            bool druidOk = !hand.Any(card => card.IsCode(Lumina, MonsterReincarnation, PotOfAvarice));
+            if (!wentFirst && CurrentHeader.CurrentTurn == 2 && board.EnemyMonsters.Count == 0 && board.EnemySpells.Count == 0 && druidOk &&
+                TryGetSummonable(state, Druid, out var druidFirst))
+            {
+                Log("Normal summon: Druid (going second into an empty field: attack and mill)");
+                return druidFirst.NormalSummon();
+            }
+
+            // Ryko is no use into a face-up Dark End Dragon: it sends Ryko away before the flip (Javier).
+            bool darkEndUp = board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(CardKnowledge.DarkEndDragon) && !card.IsDisabled());
+            // Our attackers first: a set card could be Icarus and break the set Ryko plus an attacker (Javier).
+            bool attackFirst = board.IsMain1 && board.EnemySpells.Any(card => !card.IsFaceup()) &&
+                ownMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked);
+
             // Ryko face-down first, with a Threatening Roar to hold the attacks (turn 1 ideal).
-            if (!ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) && TryGetMonsterSettable(state, Ryko, out var ryko))
+            if (!darkEndUp && !attackFirst && !ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) &&
+                TryGetMonsterSettable(state, Ryko, out var ryko))
             {
                 Log("Setting Ryko");
                 return ryko.SetMonster();
@@ -925,7 +966,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (options.Length == 0)
                 return await base.OnAnnounceNumberAsync(context, ct);
 
-            int wanted = DeckCount <= DeckCaution ? 1 : 3;
+            // Mill 3 while it still helps: a Wulf left in the deck, or names missing for Judgment Dragon (Javier).
+            int wulfSeen = GraveCopies(Wulf) + (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Count(id => CardIdentity.Same(id, Wulf)) +
+                (await GetBotMonsterCardsAsync()).Count(card => card.IsCode(Wulf));
+            bool helps = wulfSeen < 3 || GraveNames() < 4;
+            int wanted = DeckCount <= DeckCaution || !helps ? 1 : 3;
             int pick = options.Where(n => n <= wanted).DefaultIfEmpty(options.Min()).Max();
             Log($"Announcing {pick} (options {string.Join(",", options)}, deck {DeckCount})");
             return pick;
@@ -1128,6 +1173,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             !board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
             GraveCopies(Wulf) + board.Hand.Count(card => card.IsCode(Wulf)) < 3;
 
+        // Javier: Plaguespreader to the GY now, for a Goyo (level 6 = Plaguespreader + a level 4) next turn that steals
+        // their best monster. Needs a level 4 of ours and a cheap card for its top-of-deck cost.
+        private bool PlaguespreaderGoyoNextTurn(Board board) =>
+            IsBotTurn && GraveCopies(Plaguespreader) == 0 && !InHand(board.Hand, Plaguespreader) &&
+            ScoreSynchro(GoyoGuardian, board) > 30 &&
+            board.OwnMonsters.Concat(board.Hand).Any(card => card.IsCode(LightswornMonsters) && card.Level == 4) &&
+            board.Hand.Any(card => !card.IsCode(FoolishBurial) && Expendable(card));
+
         private string? FoolishPlan(Board board)
         {
             if (!CanMill(1, board))
@@ -1138,6 +1191,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return "Plaguespreader for a synchro this turn";
             if (WulfForCelestiaPlan(board))
                 return "Wulf summons itself and is tributed for Celestia";
+            if (PlaguespreaderGoyoNextTurn(board))
+                return "Plaguespreader for a Goyo next turn";
             if (MissingNamePlan(board))
                 return "the 4th name, Judgment Dragon comes down this turn";
             return null;
@@ -1153,6 +1208,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 order.Add(Plaguespreader);
             if (WulfForCelestiaPlan(board))
                 order.Add(Wulf);
+            if (PlaguespreaderGoyoNextTurn(board))
+                order.Add(Plaguespreader);
             order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
             order.AddRange(new[] { Wulf, NecroGardna, Plaguespreader });
             order.AddRange(LightswornMonsters);
@@ -1170,9 +1227,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Synchros in our Extra Deck: level and ATK (Plaguespreader is a level 2 tuner).
         private static readonly Dictionary<int, (int Level, int Attack)> Synchros = new()
         {
-            [StardustDragon] = (8, 2500), [GoyoGuardian] = (8, 2800), [RedDragonArchfiend] = (8, 3000),
+            [StardustDragon] = (8, 2500), [GoyoGuardian] = (6, 2800), [RedDragonArchfiend] = (8, 3000),
             [ThoughtRulerArchfiend] = (8, 2700), [ColossalFighter] = (8, 2800), [XSaberUrbellum] = (7, 2200),
-            [BrionacDragonOfTheIceBarrier] = (6, 2300), [MagicalAndroid] = (6, 2400), [TempestMagician] = (6, 2200),
+            [BrionacDragonOfTheIceBarrier] = (6, 2300), [MagicalAndroid] = (5, 2400), [TempestMagician] = (6, 2200),
             [AllyOfJusticeCatastor] = (5, 2200), [MistWurm] = (9, 2500), [ArmoryArm] = (4, 1800),
         };
 
