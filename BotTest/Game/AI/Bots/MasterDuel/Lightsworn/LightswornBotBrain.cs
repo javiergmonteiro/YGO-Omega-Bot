@@ -148,13 +148,43 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private static bool HasBackrow(Board board) =>
             board.EnemySpells.Any(card => !card.IsFaceup() || IsLastingCard(card));
 
+        // A face-up Destiny HERO - Plasma negates our monsters' effects: Lyla, Ryko, Lumina, Judgment Dragon do nothing.
+        private static bool PlasmaNegates(Board board) =>
+            board.EnemyMonsters.Any(card => card.IsCode(CardKnowledge.DestinyHeroPlasma) && card.IsFaceup() && !card.IsDisabled());
+
+        // Lyla's effect only when it can land: backrow to hit, no Stardust to negate it, no Plasma (Javier).
+        private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board);
+
+        // Cards we can spend on a cost without losing anything: Wulf (dead in hand), Gardna, Plaguespreader, or a
+        // Lightsworn whose name is already in the GY (not Lumina). Pot of Avarice, Charge, Judgment Dragon... are not.
+        private bool Expendable(DynamicCard card) =>
+            card.IsCode(Wulf, NecroGardna, Plaguespreader) ||
+            (card.IsCode(LightswornMonsters) && !card.IsCode(Lumina) && GraveCopies(card.ID) > 0);
+
+        // Why Judgment Dragon comes down (Javier): it gives lethal, or its wipe clears their field. Otherwise only mid-game
+        // (never on our first turn) and with no set card of theirs (Dimensional Prison banished it into a backrow).
+        private string? JudgmentReason(Board board)
+        {
+            if (PlasmaNegates(board))
+                return null;
+            if (OurLethal(board, 3000))
+                return "it gives lethal";
+            int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
+            int ours = board.OwnMonsters.Count + board.OwnSpells.Count;
+            if (theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking)
+                return "its wipe clears their field";
+            if (CurrentHeader.CurrentTurn > 2 && !board.EnemySpells.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Count > 0)
+                return "mid-game beater, no backrow";
+            return null;
+        }
+
         // Judgment Dragon's wipe: like Black Rose, when they have 2+ cards more than we do on the field.
         private bool JudgmentWipeWorthIt(Board board)
         {
             int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
             int ours = board.OwnMonsters.Count(card => !card.IsCode(JudgmentDragon)) + board.OwnSpells.Count;
             int lifePoints = CurrentField.OwnSide.LifePoints;
-            if (lifePoints <= 1000 || board.StardustBlocking || theirs - ours < 2)
+            if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board) || theirs - ours < 2)
                 return false;
 
             // Below 2000 LP only when it wins or keeps us alive.
@@ -172,9 +202,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         protected override bool CanUseMonsterEffect(int cardId, Board board, List<DynamicCard> monsterTargets) => cardId switch
         {
-            Lyla => HasBackrow(board),
+            Lyla => LylaCanBreak(board),
             JudgmentDragon => JudgmentWipeWorthIt(board),
-            Lumina => LuminaTarget(board.Graveyard, board) != 0 && board.Hand.Count > 0,
+            // Lumina only with a cheap discard in hand (it threw away a Pot of Avarice).
+            Lumina => LuminaTarget(board.Graveyard, board) != 0 && !PlasmaNegates(board) &&
+                board.Hand.Any(card => !card.IsCode(Lumina) && Expendable(card)),
             Tragoedia => FindTragoediaSteal(board).HasValue,
             CardTrooper => IsBotTurn && board.IsMain1 && CanMill(1, board),
             // Back to the hand in Main Phase 2, after hitting (Javier: "se pega en Main 1 y en Main 2 se vuelve a la mano").
@@ -197,7 +229,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 Log(deckLog);
             _lastDeckLog = deckLog;
 
-            // Draws and mills first: they only leave cards in the GY, so they never feed Gorz's condition.
+            // Ryko set last turn: flip it first thing, breaking their backrow, before anything else (Javier).
+            // Not into Tytannial (it negates the targeting) or Plasma.
+            if (IsBotTurn && board.IsMain1 && TryGetReposable(state, Ryko, out var ryko) && !ryko.IsFaceup() && CanMill(3, board) &&
+                !IsTytannialActive(board.EnemyMonsters) && !PlasmaNegates(board))
+            {
+                Log("Flip summoning Ryko");
+                return ryko.Reposition();
+            }
+
+            // Draws and mills next: they only leave cards in the GY, so they never feed Gorz's condition.
             var spell = DecideSpells(state, board);
             if (spell.HasValue)
                 return spell;
@@ -211,15 +252,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return MainAction.ToEndPhase;
             }
 
-            // Ryko set last turn: flip it first thing, breaking their backrow.
-            if (IsBotTurn && board.IsMain1 && TryGetReposable(state, Ryko, out var ryko) && !ryko.IsFaceup() && CanMill(3, board))
-            {
-                Log("Flip summoning Ryko");
-                return ryko.Reposition();
-            }
-
             // Lyla breaks a spell/trap (she goes to defense).
-            if (HasBackrow(board) && TryActivate(state, Lyla, board.StardustBlocking, out var lyla))
+            if (LylaCanBreak(board) && TryActivate(state, Lyla, false, out var lyla))
             {
                 _pendingEffect = Lyla;
                 return lyla;
@@ -253,9 +287,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     LogOnChange("Judgment Dragon waits: Royal Oppression would negate it");
                 else if (!CanMill(4, board) && !lastResort)
                     LogOnChange($"Judgment Dragon waits: its End Phase mill would leave {DeckCount - 4} cards");
+                else if (JudgmentReason(board) == null && !lastResort)
+                    LogOnChange("Judgment Dragon waits: no lethal, nothing to wipe, and not a mid-game turn into an empty backrow");
                 else
                 {
-                    Log($"Special summoning Judgment Dragon ({GraveNames()} names){(lastResort ? ": only play against their lethal" : "")}");
+                    Log($"Special summoning Judgment Dragon ({GraveNames()} names): {(lastResort ? "only play against their lethal" : JudgmentReason(board))}");
                     return judgment.SpecialSummon();
                 }
             }
@@ -462,7 +498,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             var order = new List<int>();
-            if (HasBackrow(board))
+            if (LylaCanBreak(board))
                 order.Add(Lyla);
             if (enemyFaceDown)
                 order.Add(Ehren);
@@ -479,7 +515,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 if (!TryGetSummonable(state, cardId, out var card))
                     continue;
 
-                bool hasJob = (cardId == Lyla && HasBackrow(board)) || (cardId == Ehren && enemyFaceDown);
+                bool hasJob = (cardId == Lyla && LylaCanBreak(board)) || (cardId == Ehren && enemyFaceDown);
                 bool mills = card.IsCode(EndPhaseMillers);
                 if (mills && DeckCount <= DeckFloor && !OurLethal(board, card.Attack) && !needBlocker)
                 {
@@ -604,6 +640,19 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return true;
             }
 
+            if (card.IsCode(Lyla) && location == CardLocation.MonsterZone)
+            {
+                bool use = LylaCanBreak(await BuildBoardAsync());
+                if (use)
+                    _pendingEffect = Lyla;
+                else
+                    Log("Lyla's effect skipped: no backrow, or Stardust / Plasma would negate it");
+                return use;
+            }
+
+            if (card.IsCode(NecroGardna))
+                return await ShouldUseGardnaAsync();
+
             if (card.IsCode(Celestia))
             {
                 var board = await BuildBoardAsync();
@@ -626,6 +675,36 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             return null;
+        }
+
+        // Necro Gardna only on an attack declaration, to save a key monster (Javier): Lumina, Judgment Dragon, or a
+        // Lightsworn other than Ryko when Celestia in hand wants it as tribute next turn. Also a direct attack that kills.
+        private async Task<bool> ShouldUseGardnaAsync()
+        {
+            var enemySide = CurrentField.EnemySide;
+            var ownSide = CurrentField.OwnSide;
+            if (IsBotTurn || !enemySide.HasBattlingMonster || Chain.AnsweredCurrentChain(CurrentHeader))
+            {
+                LogOnChange("Necro Gardna waits for an attack declaration");
+                return false;
+            }
+
+            int attack = enemySide.BattlingMonster.Attack;
+            if (!ownSide.HasBattlingMonster)
+            {
+                bool lethal = attack >= ownSide.LifePoints;
+                Log($"Necro Gardna on a direct attack of {attack}: {(lethal ? "yes, it would kill us" : "no, not lethal")}");
+                return lethal;
+            }
+
+            var target = ownSide.BattlingMonster;
+            bool dies = attack >= target.GetRealPower();
+            bool celestiaTribute = target.IsCode(LightswornMonsters) && !target.IsCode(Ryko) &&
+                (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Celestia));
+            bool key = target.IsCode(Lumina, JudgmentDragon) || celestiaTribute;
+            bool use = dies && key;
+            Log($"Necro Gardna on an attack into {target.ID}: {(use ? "yes, key monster" : dies ? "no, not a key monster" : "no, it survives")}");
+            return use;
         }
 
         // Gorz: they usually attack from weakest to strongest, so wait for the last hit (a bigger token). If a stronger
@@ -746,7 +825,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Plaguespreader's cost: a card from hand on top of the deck. Wulf first: the next mill sends it to the GY
             // and it summons itself.
             if (All(CardLocation.Hand) && hint == DHint.TODECK)
-                return Picked("On top of the deck", PickInOrder(state, new[] { Wulf, Plaguespreader, NecroGardna }), selectable);
+                return Picked("On top of the deck", PickInOrder(state, new[] { Wulf, NecroGardna, Plaguespreader }
+                    .Concat(LightswornMonsters.Where(id => id != Lumina && GraveCopies(id) > 0)).ToArray()), selectable);
 
             // Charge of the Light Brigade's search.
             if (All(CardLocation.Deck) && hint == DHint.ATOHAND)
@@ -928,7 +1008,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             bool lastResort = OpponentHasLethal(board);
             return IsBotTurn && (!SummonTrapPossible(board) || lastResort) && !OppressionStopsOurSpecialSummons(board) &&
-                (CanMill(4, board) || lastResort);
+                (CanMill(4, board) || lastResort) && (JudgmentReason(board) != null || lastResort);
         }
 
         // Synchros in our Extra Deck: level and ATK (Plaguespreader is a level 2 tuner).
@@ -947,13 +1027,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             if (!IsBotTurn || SummonTrapPossible(board) || OppressionStopsOurSpecialSummons(board))
                 return false;
+            // Its cost puts a card from hand on top of the deck: only a cheap one.
+            if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
+                return false;
 
             int ourAttack = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).Sum(card => card.Attack);
             foreach (var material in board.OwnMonsters.Where(card => card.IsFaceup() && !card.HasType((CardType)CardKnowledge.TunerType)))
             {
                 foreach (var (synchro, stats) in Synchros.Where(x => x.Value.Level == material.Level + 2).Select(x => (x.Key, x.Value)))
                 {
-                    if (ScoreSynchro(synchro, board) > 30)
+                    // Brionac costs another discard: only for lethal (below).
+                    if (synchro != BrionacDragonOfTheIceBarrier && ScoreSynchro(synchro, board) > 30)
                         return true;
                     int materialAttack = material.IsAttack() && !material.Attacked ? material.Attack : 0;
                     bool lethal = board.IsMain1 && board.EnemyMonsters.Count == 0 &&

@@ -36,10 +36,10 @@ Código: `MaterialCost`
 
 Orden en que el bot decide en la Main Phase (la primera regla que se cumple, juega y vuelve a preguntar). Antes corren las aperturas generales (Trap Dustshoot, Heavy Storm cuando conviene, etc.). Después corren los efectos de monstruo y los sets de trampas. El resto del fallback genérico no invoca, no setea ni activa ninguna carta del mazo.
 
-1. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
-2. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
-3. **Flipear Ryko**, lo primero del turno (Main 1).
-4. **Efecto de Lyla** si el rival tiene backrow.
+1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No contra Tytannial (niega el objetivo) ni con Plasma.
+2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
+3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
+4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma).
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
 6. **Celestia** tributando un Lightsworn, si el rival tiene cartas.
 7. **Judgment Dragon** (ver su ficha).
@@ -96,7 +96,13 @@ Código: `DecideNormalSummon`
 
 ### Judgment Dragon
 
-**Se invoca cuando están los 4 nombres, salvo que:**
+**Se invoca con los 4 nombres y un motivo:**
+- da lethal ese turno;
+- su efecto limpia el campo del rival (2 cartas o más que vos, 2000 LP o más);
+- mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
+- Sin motivo, espera. Con Plasma boca arriba no se invoca.
+
+**Y aun así espera si:**
 - una carta seteada del rival pueda ser Bottomless o Torrential (las que todavía le puedan quedar). Excepción: el rival tiene lethal en campo (es la única jugada para no perder);
 - Royal Oppression la negaría;
 - su mill de la End Phase (4) lo dejaría en el piso de 6.
@@ -106,7 +112,7 @@ Código: `DecideNormalSummon`
 - No con Stardust activo (lo negaría).
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno o el rival tiene lethal.
 
-Código: `JudgmentWipeWorthIt`, `SummonTrapPossible`
+Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SummonTrapPossible`
 
 ### Gorz
 
@@ -176,14 +182,15 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 
 **Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
-- El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Brionac devuelve una amenaza o la backrow, Magical Android cura con poca vida...) o da lethal.
-- Para revivirlo pone una carta de la mano arriba del deck: Wulf primero (el próximo mill lo manda al cementerio y se invoca solo).
+- El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.
+- Brionac solo si da lethal: cuesta otro descarte más.
+- Para revivirlo pone una carta de la mano arriba del deck, y tiene que ser barata: Wulf, Necro Gardna, Plaguespreader o un Lightsworn cuyo nombre ya está en el cementerio (no Lumina). Si no hay, no se hace (economía de cartas).
 
 Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 ### Lumina
 
-**Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip).
+**Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip), **y si hay un descarte barato en la mano** (Wulf, Plaguespreader, Necro Gardna o un Lightsworn ya en el cementerio). Nunca descarta un Pot of Avarice u otra magia útil. Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
 - Qué descarta: Wulf, Plaguespreader, Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano.
@@ -196,6 +203,16 @@ Código: `LuminaTarget`, `DiscardOrder`
 - Celestia destruye 2 si puede. Su efecto se saltea si moler 4 lo deja en el piso.
 
 Código: `SelectDeckCardAsync`
+
+### Necro Gardna
+
+**Solo en la declaración de ataque del rival, para salvar un monstruo clave** que moriría en esa batalla:
+- Lumina o Judgment Dragon;
+- un Lightsworn que no sea Ryko, si tenés Celestia en mano para tributarlo al turno siguiente.
+- También ante un ataque directo que te mataría.
+- Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
+
+Código: `ShouldUseGardnaAsync`
 
 ### Card Trooper
 

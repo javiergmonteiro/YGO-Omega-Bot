@@ -121,6 +121,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 ## Judgment Dragon
 
 ### Cuándo bajarlo
+- Dos casos grandes: tengo lethal, o necesito borrar el campo del rival. Después se puede bajar mid game (sin backrow del rival), pero nunca en el turno 1.
 - Primero limpiar las amenazas (cartas boca abajo del rival) con Lyla, Ryko o las magias.
 - Las importantes son las 2 Bottomless (las que permite Edison) y la Torrential. Si ya están en el cementerio, no hace falta limpiar.
 - Si no se puede limpiar, esperar. Excepción: que sea la única jugada para no perder.
@@ -135,6 +136,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 - **Solar Recharge:** excelente iniciador para robar.
   - Qué descartar: primero Wulf, después el Lightsworn más repetido. Nunca Lumina.
+- **Ryko:** si está seteado, lo primero del turno es flipearlo para limpiar la backrow, y después arrancar a jugar.
 - **Ryko:** prioridad ponerlo boca abajo en el turno 1, junto con un Threatening Roar.
   - El Roar frena los ataques.
   - Turno 2, lo primero de todo: flipear Ryko y romper la backrow. Después, Celestia tributándolo para romper 2 cartas más (caso ideal).
@@ -195,6 +197,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 ### Necro Gardna
 - Otro buen descarte.
+- Se usa únicamente en la declaración de ataque, para proteger un monstruo clave: Lumina, JD, o cualquier Lightsworn excepto Ryko si al otro turno lo tributo para Celestia. Nunca por cualquier cosa.
 - Rara vez con Foolish, pero es válido para mantener vivo un monstruo útil en campo (por ejemplo, un Lightsworn para tributarlo para Celestia al turno siguiente). Cumple casi lo mismo que Threatening Roar.
 
 ### Trap Dustshoot y Mirror Force
@@ -215,7 +218,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
   3. Wulf
   - Ryko nunca, porque vuelve boca arriba y no se activa su efecto flip.
   - Respetar la regla de los 4 nombres: si quedo justo en 4, revivir uno repetido.
-- **Qué descartar:** Wulf, después Plaguespread, después Necro Gardna, después un Lightsworn repetido.
+- **Qué descartar:** Wulf, después Plaguespread, después Necro Gardna, después un Lightsworn repetido. Nunca una carta útil como Pot of Avarice: si no hay descarte barato, no se usa.
 
 ### Honest
 - Carta clave: elimina amenazas o mantiene vivos a mis monstruos. Se usa siempre en el damage step.
@@ -240,6 +243,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 ### Lyla
 - Rompe backrow (pasa a defensa). Clave para limpiar antes de JD.
+- No usar su efecto si el rival tiene algo que lo niega (Stardust, Destiny HERO - Plasma).
 
 ### Celestia
 - Se tributa (idealmente un Ryko ya usado) para destruir 2 cartas. Prioridad: backrow que impide JD, después monstruos.
