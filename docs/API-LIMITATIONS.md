@@ -59,6 +59,7 @@ Cada entrada tiene:
 | Header `LastChainPlayer` / `LastSummonPlayer` | 0 = bot, 1 = rival, -1 = desconocido |
 | Header `CurrentPlayer` | 0 = turno del bot |
 | Respuesta idle/battle | `ushort action, ushort index` |
+| Respuesta AnnounceNumber | **índice** en `SelectableOptions`, no el valor (los handlers devuelven el valor y `BotStateDispatcher` lo convierte). Ya pasó: Card Trooper respondió 3 a [3,2,1] y se cortó el duelo |
 | BotState codes | 1 BattleCmd, 2 SelectCard, 4 SelectChain, 7 EffectYn, 8 IdleCmd, 10 SelectPlace, 11 Position, 12 Sum, 19 WaitingForDeck, 20 YesNo |
 
 - **Cartas boca abajo del rival:** en los datos de selección llegan con ID 0 o -3. Las cartas enemigas se identifican por **controller + sequence**, nunca por ID; eso incluye `_forcedAttackTarget` en `ATTACKTARGET`. Ya pasó: Icarus apuntó al propio Solemn del bot por comparar por ID.

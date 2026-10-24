@@ -309,7 +309,10 @@ namespace OmegaBotWrapper
             var announceNumberResponse = BotResponseValidator.ValidateAnnounceNumber(
                 await _bot.OnAnnounceNumberAction(announceNumberState.CurrentStateData),
                 announceNumberState.CurrentStateData, _bot.BotID);
-            return BotResponseWriter.WriteAnnounceNumber(announceNumberResponse);
+            // Handlers pick a value, but the engine expects its index in SelectableOptions: answering the value 3 to
+            // options [3,2,1] (Card Trooper) ended the duel.
+            int announceNumberIndex = Math.Max(0, Array.IndexOf(announceNumberState.CurrentStateData.SelectableOptions ?? Array.Empty<int>(), announceNumberResponse));
+            return BotResponseWriter.WriteAnnounceNumber(announceNumberIndex);
         }
 
         private async Task<byte[]?> HandleAnnounceRaceAsync(CancellationToken ct)
