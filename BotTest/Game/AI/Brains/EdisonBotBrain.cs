@@ -1112,37 +1112,6 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
-            // They control no cards and may hold Gorz: its token gets the damage of the attack, so poke with the
-            // weakest attacker first (a smaller token, and the rest can still react after it).
-            var enemySideNow = CurrentField.EnemySide;
-            bool enemyEmpty = (await GetEnemyMonsterCardsAsync()).Count == 0 && (await GetEnemySpellCardsAsync()).Count == 0;
-            // Only when we know they play it: seen in their hand, or a copy already seen in public this duel
-            // (2026-10-17: Dark Armed Dragon skipped two direct attacks into an empty field on a Gorz they never had).
-            bool gorzSeen = StillInRevealedHand(GorzTheEmissaryOfDarkness) ||
-                (enemySideNow.Grave ?? Array.Empty<int>()).Concat(enemySideNow.Banish ?? Array.Empty<int>())
-                    .Any(id => CardIdentity.Same(id, GorzTheEmissaryOfDarkness));
-            bool gorzPossible = (enemySideNow.Hand ?? Array.Empty<int>()).Length > 0 && gorzSeen &&
-                CardCounter.OpponentCopiesLeft(GorzTheEmissaryOfDarkness, enemySideNow.Grave, enemySideNow.Banish, Array.Empty<int>()) > 0;
-            // Only the first listed monster can attack, so we can't pick the weakest: if the first isn't the weakest
-            // and nothing set answers Gorz and its token (Icarus, Mirror Force, Prison, Book of Moon), stay back
-            // rather than hand them a big token. An attack that wins the duel goes anyway.
-            if (enemyEmpty && gorzPossible && attackers.Length > 0 && !attackers[0].Attacked && attackers[0].CanDirectAttack)
-            {
-                var ready = allAttackers.Where(card => !card.Attacked && card.CanDirectAttack).ToList();
-                bool firstIsWeakest = ready.All(card => card.Attack >= attackers[0].Attack);
-                bool lethal = ready.Sum(card => card.Attack) >= enemySideNow.LifePoints;
-                bool answerSet = (await GetOwnSpellCardsAsync()).Any(card => !card.IsFaceup() &&
-                    card.IsCode(IcarusAttack, MirrorForce, DimensionalPrison, BookOfMoon));
-                if (!firstIsWeakest && !answerSet && !lethal)
-                {
-                    Log($"{attackers[0].ID} stays back: Gorz possible, it isn't our weakest attacker and nothing set answers it");
-                    return context.StateData.CanMainPhaseTwo ? BattleAction.ToMainPhaseTwo : BattleAction.ToEndPhase;
-                }
-
-                Log($"{attackers[0].ID} attacks directly, Gorz possible ({(firstIsWeakest ? "weakest attacker" : answerSet ? "answer set" : "lethal")})");
-                return AttackWith(attackers[0]);
-            }
-
             // Monsters with an effect when they destroy a monster by battle (Shura) attack first, into a non-token
             // they beat: tokens don't go to the GY, so they don't trigger anything. Others can clean up tokens.
             var battleTargets = await GetEnemyMonsterCardsAsync();

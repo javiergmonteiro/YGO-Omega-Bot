@@ -118,12 +118,10 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
 2. **Si vio Mirror Force en su mano** y el rival tiene cartas seteadas: un solo ataque por batalla, y el resto se queda.
 3. **Si vio en su mano una trampa de batalla** (Prison, Sakuretsu…) con cartas seteadas: un monstruo importante no ataca, salvo que gane el duelo.
    - Solo si no hay otros atacantes esperando detrás: si los hay, ataca igual, porque quedarse frena a todos.
-4. **Gorz:** si el rival no tiene cartas y puede tener Gorz, ataca directo solo el más débil.
-   - Si el primero no es el más débil, no tenemos nada seteado que conteste a Gorz y no es lethal, no ataca.
-5. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
-6. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
-7. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress).
-8. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
+4. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
+5. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
+6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress).
+7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:
     - **Un monstruo robado choca aunque empate** con un monstruo del rival en ataque, porque igual se devuelve en la End Phase. Solo si no tiene un ataque mejor que gane.
@@ -576,15 +574,11 @@ Código: `BookOfMoonPriority`, `UseBookOfMoonOnAttacker`, `DecideGenericAttackAs
 
 ### Gorz, the Emissary of Darkness
 
-**Si el rival no tiene cartas en campo y pudiera tener Gorz, el bot cuida el ataque.**
-- Gorz posible = el rival tiene cartas en la mano, sabemos que juega Gorz (se vio en su mano revelada y no caducó, o ya vimos una copia en su GY o desterrada este duelo) y le quedan copias según la banlist.
-- Sin evidencia de que juegue Gorz, se ataca normal.
-- Con campo vacío (ni monstruos ni magias/trampas) y un ataque directo posible: ataca el primero si es el más débil de los que pueden atacar, si hay una respuesta seteada (Icarus, Mirror Force, Dimensional Prison, Book of Moon) o si el golpe es letal. Si no, se queda sin atacar (va a Main 2/End).
-- Razón: el token de Gorz recibe el daño de nuestro ataque; mejor un token chico.
+**Ya no se frena el ataque por Gorz** (se sacó: el 2026-10-24 canceló 3 ataques directos por 5100 de daño, porque quedarse con el primero frena a todos).
 - Dustshoot: prioridad máxima (4000, más 2000 con nuestros atacantes en juego).
 - Icarus en nuestro paso de batalla se usa para despejar a Gorz y su token cuando frenan al próximo atacante.
 
-Código: `DecideBattleCmdCoreAsync` (Gorz), `HandPickScore`
+Código: `HandPickScore`
 
 ### Mirror Force y Torrential Tribute (castigan sobreextenderse)
 
