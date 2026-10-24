@@ -151,6 +151,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         /// <summary>Enough cards left to mill this many and stay above the floor.</summary>
         private bool CanMill(int cards, Board board) => DeckCount - cards > DeckFloor || OurLethal(board);
 
+        // Optional mill spells (Solar Recharge, Charge) only while the deck stays above the caution line (15), so
+        // Judgment Dragon still has room for its End Phase mill: in one turn they took the deck from 23 to 7 and JD
+        // never came down. With Judgment Dragon in hand and 4 names already, no more milling is needed.
+        private bool MillKeepsCaution(int cards, Board board)
+        {
+            if (OurLethal(board))
+                return true;
+            if (InHand(board.Hand, JudgmentDragon) && GraveNames() >= 4)
+                return false;
+            return DeckCount - cards > DeckCaution;
+        }
+
         // A set card that may be Bottomless or Torrential: Judgment Dragon waits for it to be cleared.
         // Set cards that already let one of our summons through don't count (see TrackUnansweredSummons).
         private bool SummonTrapPossible(Board board) =>
@@ -223,6 +235,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int ours = board.OwnMonsters.Count + board.OwnSpells.Count;
             bool wipe = theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking;
 
+            // Stardust negates the wipe: JD comes down in Main 1 to attack it; if it passes, the wipe in Main 2 (Javier).
+            bool stardustToHit = board.StardustBlocking &&
+                board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(StardustDragon) && card.GetRealPower() < 3000);
+            if (board.IsMain1 && stardustToHit && !SummonTrapPossible(board))
+                return "attacks Stardust (its wipe waits for Main 2)";
+
             // Main 1 only when wiping and then hitting directly wins; otherwise Main 2, after the battle showed their backrow.
             if (board.IsMain1)
                 return wipe && 3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : null;
@@ -253,6 +271,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return true;
         }
 
+        // Card Trooper's mill: not at 15 cards or fewer (it milled at 5, 3 and 1 cards and we lost by deck-out), unless
+        // our attackers already finish them.
+        private bool TrooperMills(Board board)
+        {
+            if (!IsBotTurn || !board.IsMain1)
+                return false;
+            bool use = (DeckCount > DeckCaution && CanMill(1, board)) || OurLethal(board);
+            if (!use)
+                LogOnChange($"Card Trooper's mill skipped: {DeckCount} cards left");
+            return use;
+        }
+
         // ---- Main Phase ---------------------------------------------------------------------------------
 
         protected override bool CanUseMonsterEffect(int cardId, Board board, List<DynamicCard> monsterTargets) => cardId switch
@@ -263,7 +293,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             Lumina => LuminaTarget(board.Graveyard, board) != 0 && !PlasmaNegates(board) &&
                 board.Hand.Any(card => !card.IsCode(Lumina) && Expendable(card)),
             Tragoedia => FindTragoediaSteal(board).HasValue,
-            CardTrooper => IsBotTurn && board.IsMain1 && CanMill(1, board),
+            CardTrooper => TrooperMills(board),
             // Back to the hand in Main Phase 2, after hitting (Javier: "se pega en Main 1 y en Main 2 se vuelve a la mano").
             // Below 3000 LP it stays as a 1900 DEF wall.
             Honest => IsBotTurn && !board.IsMain1 && CurrentField.OwnSide.LifePoints >= 3000,
@@ -419,7 +449,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Solar Recharge: draw 2, mill 2. Needs a Lightsworn to discard (never Lumina unless it's the only one).
-            if (CanMill(4, board) && hand.Any(card => card.IsCode(LightswornMonsters)) &&
+            if (CanMill(4, board) && MillKeepsCaution(2, board) && hand.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryActivate(state, SolarRecharge, false, out var solar))
             {
                 _pendingEffect = SolarRecharge;
@@ -548,6 +578,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             bool honestInHand = InHand(hand, Honest);
             bool needBlocker = OpponentHasLethal(board) || (ownMonsters.Count == 0 && CurrentField.OwnSide.LifePoints <= 3000);
 
+            // Lyla first when she can break their backrow now (Javier: clear it as soon as possible).
+            if (LylaCanBreak(board) && TryGetSummonable(state, Lyla, out var lylaNow))
+            {
+                Log("Normal summon: Lyla, clears their backrow before anything else");
+                return lylaNow.NormalSummon();
+            }
+
             // Ryko face-down first, with a Threatening Roar to hold the attacks (turn 1 ideal).
             if (!ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) && TryGetMonsterSettable(state, Ryko, out var ryko))
             {
@@ -573,8 +610,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 if (!TryGetSummonable(state, cardId, out var card))
                     continue;
 
-                bool hasJob = (cardId == Lyla && LylaCanBreak(board)) || (cardId == Ehren && enemyFaceDown);
+                bool hasJob = (cardId == Lyla && LylaCanBreak(board)) || (cardId == Ehren && enemyFaceDown) ||
+                    (cardId == Lumina && CanUseMonsterEffect(Lumina, board, board.EnemyMonsters));
                 bool mills = card.IsCode(EndPhaseMillers);
+                if (cardId == CardTrooper && DeckCount <= DeckCaution && !OurLethal(board))
+                {
+                    if (TryGetMonsterSettable(state, CardTrooper, out var trooperSet))
+                    {
+                        Log($"Setting Card Trooper: {DeckCount} cards left, no more milling");
+                        return trooperSet.SetMonster();
+                    }
+                    continue;
+                }
                 if (mills && DeckCount <= DeckFloor && !OurLethal(board, card.Attack) && !needBlocker)
                 {
                     LogOnChange($"Holding {cardId}: {DeckCount} cards left, its End Phase mill is too risky");
@@ -692,7 +739,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             if (card.IsCode(Honest) && location == CardLocation.Hand)
-                return ShouldUseHonest();
+                return ShouldUseHonest(await GetEnemySpellCardsAsync());
 
             if (card.IsCode(Ryko))
             {
@@ -806,7 +853,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         }
 
         // Honest in the Damage Step: when it turns the battle (we'd lose or bounce without it).
-        private bool ShouldUseHonest()
+        private bool ShouldUseHonest(List<DynamicCard> enemySpells)
         {
             var ownSide = CurrentField.OwnSide;
             var enemySide = CurrentField.EnemySide;
@@ -817,6 +864,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             var theirs = enemySide.BattlingMonster;
             if ((ours.Attribute & LightAttribute) == 0 || theirs.Attack <= 0)
                 return false;
+
+            // A Machina Fortress with Gearframe equipped: the union is destroyed instead, nothing gained (Javier).
+            bool unionShield = theirs.IsCode(CardKnowledge.MachinaFortress) &&
+                enemySpells.Any(card => card.IsFaceup() && card.IsCode(MachinaGearframe));
+            if (unionShield)
+            {
+                Log("Honest skipped: Gearframe protects their Machina Fortress");
+                return false;
+            }
 
             // One Honest per battle: the next prompt in the same damage step still shows the old ATK.
             string battle = $"{CurrentHeader.CurrentTurn}:{ours.CurrentCoordinates.Sequence}:{theirs.CurrentCoordinates.Sequence}";
@@ -851,8 +907,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             var positions = context.StateData.Positions ?? Array.Empty<byte>();
             int cardId = context.StateData.CardID;
-            // Gorz and Tragoedia come down in defense to stop the attack (Javier).
-            if ((CardIdentity.Same(cardId, Gorz) || CardIdentity.Same(cardId, Tragoedia)) && positions.Contains((byte)CardPosition.FaceUpDefence))
+            // Gorz, its token and Tragoedia come down in defense to stop the attack (Javier).
+            if ((CardIdentity.Same(cardId, Gorz) || CardIdentity.Same(cardId, GorzToken) || CardIdentity.Same(cardId, Tragoedia)) &&
+                positions.Contains((byte)CardPosition.FaceUpDefence))
             {
                 Log($"{cardId} in defense");
                 return CardPosition.FaceUpDefence;
@@ -950,6 +1007,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Ryko, Celestia and Lyla break their backrow first (Javier: clear it before Judgment Dragon).
+            if (_pendingEffect == 0 && !IsBotTurn && hint == DHint.DESTROY)
+                _pendingEffect = Ryko;
             if (_pendingEffect is Ryko or Celestia or Lyla && hint is DHint.DESTROY or DHint.TARGET)
             {
                 int wanted = _pendingEffect == Celestia ? Math.Max(state.Minimum, Math.Min(2, state.Maximum)) : Math.Max(state.Minimum, 1);

@@ -54,6 +54,8 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 
 ### Cartas en el deck
 
+- Las magias de mill opcionales (Solar Recharge, Charge) solo si el deck queda por encima de 15, y no si ya tenés JD en mano con 4 nombres: en un turno bajaron el deck de 23 a 7 y JD nunca pudo bajar.
+
 **El bot cuenta las cartas que quedan en el deck (si llegás a 0, perdés).**
 - **15 o menos:** no baja otro Lightsworn que muela en la End Phase si ya hay uno moliendo, salvo que tenga un trabajo (Lyla con backrow rival, Ehren con monstruos boca abajo), haya lethal o haga falta un bloqueador. Card Trooper muele 1. Pot of Avarice se usa sí o sí.
 - **6 o menos (piso):** ningún mill opcional que lo deje en 6 o menos (Solar Recharge, Charge, Card Trooper, Celestia, flipear Ryko, JD), salvo lethal.
@@ -68,6 +70,8 @@ Código: `CanMill`, `DeckCaution`, `DeckFloor`
 Código: `GraveNames`
 
 ### Prioridad de invocación normal
+
+- Si Lyla puede romper una backrow, va antes que setear Ryko. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
 
 **Primero Ryko boca abajo** (si no hay otro Ryko seteado). Después:
 1. Lyla, si el rival tiene backrow
@@ -103,6 +107,8 @@ Código: `DecideNormalSummon`
 - **Main 1 solo si gana:** da lethal, o el efecto limpia y JD pega directo por la victoria. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
 - Sin motivo, espera. Con Plasma boca arriba no se invoca.
 
+**Stardust:** su efecto negaría el wipe, así que JD baja en Main 1 para atacar a Stardust (sin efecto); si pasa, el wipe va en Main 2.
+
 **Probabilidad de Bottomless:** si invocás un monstruo de 1500+ y el rival lo deja pasar con sus cartas seteadas, esas cartas cuentan como "probablemente no Bottomless" y no frenan a JD ni al synchro. Si el rival cambia sus cartas seteadas, se olvida.
 
 **Y aun así espera si:**
@@ -120,7 +126,7 @@ Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SummonTrapPossible`
 ### Gorz
 
 **Se invoca cuando no controlás cartas.**
-- Siempre en defensa.
+- Siempre en defensa, y su token también.
 - Espera al último ataque (el token sale más grande): si todavía falta atacar un monstruo con más ATK que el golpe recibido, no lo baja.
 - Si el golpe ya fue el más fuerte, o lo que falta atacar te mata, lo baja enseguida.
 
@@ -203,7 +209,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 
 ### Ryko, Celestia y Lyla
 
-**Rompen primero la backrow boca abajo del rival**, después las cartas continuas y después los monstruos por amenaza (los tokens al final).
+**Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 
 Código: `SelectDeckCardAsync`
@@ -229,7 +235,7 @@ Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 
 ### Card Trooper
 
-**Muele 3 (más chances de Wulf), 1 con 15 cartas o menos.** Se activa en la Main 1 de tu turno.
+**Muele 3 (más chances de Wulf).** Se activa en la Main 1 de tu turno, solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
 
 Código: `OnAnnounceNumberAsync`
 
@@ -245,6 +251,7 @@ Código: `DecideOwnEffectAsync`
 **En el damage step:**
 - Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana, o si con Honest el daño da lethal.
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
+- No contra una Machina Fortress con Gearframe equipado (se destruye el Gearframe y no se gana nada).
 - Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal o que Ryko sea el tributo de Celestia (en mano) para el turno siguiente.
 - Una vez por batalla.
 

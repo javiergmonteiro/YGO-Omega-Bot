@@ -21,6 +21,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         public const int Honest = 37742478;
         public const int NecroGardna = 4906301;
         public const int CardTrooper = 85087012;
+        public const int GorzToken = 44330099;
+        public const int MachinaGearframe = 42940404;
         public const int Plaguespreader = 33420078;
 
         // Spells
