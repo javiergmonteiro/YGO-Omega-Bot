@@ -127,6 +127,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 cost += 10000;
             if (card.IsCode(CardTrooper))
                 cost += 5000;
+            // A face-up Druid keeps our Lightsworn untargetable (Icarus, Javier: "ojo con Druid e Icarus"): tribute it last.
+            if (card.IsCode(Druid) && card.IsFaceup())
+                cost += 2000;
             return cost;
         }
 
@@ -206,26 +209,24 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Lyla's effect only when it can land: backrow to hit, no Stardust to negate it, no Plasma (Javier).
         private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board);
 
-        // Javier: a face-up attack Lyla that wins her battle (or hits directly) attacks first and breaks a card in Main 2:
-        //  - 2+ set cards once their Mirror Force is gone (if a Prison takes her it still spent a backrow). While Mirror
-        //    Force hasn't shown up, 2+ sets likely hide it: effect first, before our attackers walk into it.
-        //  - 1 lone set card with no monster of theirs: she hits directly first.
+        // Javier: with one lone set card, a face-up attack Lyla attacks first (directly into an empty field, or into
+        // their only monster when it's face-down) to draw out a Prison / Mirror Force; if she survives, her effect in
+        // Main 2. With 2+ set cards she never attacks first: her effect goes in Main 1.
         private bool LylaAttacksFirst(Board board)
         {
             if (!IsBotTurn || !board.IsMain1 ||
                 !board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked))
                 return false;
-            int sets = board.EnemySpells.Count(card => !card.IsFaceup());
-            if (sets == 1)
-                return board.EnemyMonsters.Count == 0;
-            return sets >= 2 && TheirMirrorForceGone() &&
-                (board.EnemyMonsters.Count == 0 || board.EnemyMonsters.Any(card => !card.IsFaceup() || card.GetRealPower() < 1700));
+            if (board.EnemySpells.Count(card => !card.IsFaceup()) != 1)
+                return false;
+            return board.EnemyMonsters.Count == 0 || (board.EnemyMonsters.Count == 1 && !board.EnemyMonsters[0].IsFaceup());
         }
 
-        // Mirror Force is limited: once it's in their GY or banished, no set card of theirs is one.
-        private bool TheirMirrorForceGone() =>
-            (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).Concat(CurrentField.EnemySide.Banish ?? Array.Empty<int>())
-                .Any(id => CardIdentity.Same(id, MirrorForce));
+        // Javier: with a set monster of theirs and 2+ set cards, Lyla's effect waits until their summon window passed
+        // (no priority): a Bottomless has to show itself first. With no set monster, the effect goes with priority and
+        // forces their summon traps.
+        private static bool LylaWaitsForSummonWindow(Board board) =>
+            board.EnemyMonsters.Any(card => !card.IsFaceup()) && board.EnemySpells.Count(card => !card.IsFaceup()) >= 2;
 
         private bool LylaEffectNow(Board board) => LylaCanBreak(board) && !LylaAttacksFirst(board);
 
@@ -316,9 +317,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             Lyla => LylaEffectNow(board),
             JudgmentDragon => JudgmentWipeWorthIt(board),
-            // Lumina only with a cheap discard in hand (it threw away a Pot of Avarice).
+            // Lumina with something to revive discards whatever it takes, except what we'd use right away (Judgment
+            // Dragon, Javier).
             Lumina => LuminaTarget(board.Graveyard, board) != 0 && !PlasmaNegates(board) &&
-                board.Hand.Any(card => !card.IsCode(Lumina) && Expendable(card)),
+                board.Hand.Any(card => !card.IsCode(Lumina, JudgmentDragon)),
             Tragoedia => FindTragoediaSteal(board).HasValue,
             CardTrooper => TrooperMills(board),
             // Back to the hand in Main Phase 2, after hitting (Javier: "se pega en Main 1 y en Main 2 se vuelve a la mano").
@@ -640,6 +642,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 Log("Normal summon: Card Trooper (going second, it clears)");
                 return trooperFirst.NormalSummon();
             }
+            // Against 2+ set cards the cheap bait goes: Card Trooper, while Lumina waits (Bottomless on what it revives,
+            // Icarus, Javier).
+            if (board.EnemySpells.Count(card => !card.IsFaceup()) >= 2 && DeckCount > DeckCaution &&
+                TryGetSummonable(state, CardTrooper, out var trooperBait))
+            {
+                Log("Normal summon: Card Trooper (cheap bait into 2+ set cards, Lumina waits)");
+                return trooperBait.NormalSummon();
+            }
             bool druidOk = !hand.Any(card => card.IsCode(Lumina, MonsterReincarnation, PotOfAvarice));
             if (!wentFirst && CurrentHeader.CurrentTurn == 2 && board.EnemyMonsters.Count == 0 && board.EnemySpells.Count == 0 && druidOk &&
                 TryGetSummonable(state, Druid, out var druidFirst))
@@ -663,7 +673,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             var order = new List<int>();
-            if (LylaCanBreak(board))
+            // Going first without Ryko, Lyla on turn 1: next turn they must set a backrow she breaks (or none), and her
+            // mill may hit Wulf (Javier).
+            if (LylaCanBreak(board) || (wentFirst && CurrentHeader.CurrentTurn == 1))
                 order.Add(Lyla);
             if (enemyFaceDown)
                 order.Add(Ehren);
@@ -819,7 +831,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             if (card.IsCode(Lyla) && location == CardLocation.MonsterZone)
             {
-                bool use = LylaEffectNow(await BuildBoardAsync());
+                var lylaBoard = await BuildBoardAsync();
+                if (IsBotTurn && CurrentHeader.LastChainPlayer == -1 && LylaWaitsForSummonWindow(lylaBoard))
+                {
+                    Log("Lyla's effect waits: no priority, their summon window first (set monster and 2+ set cards)");
+                    return false;
+                }
+                bool use = LylaEffectNow(lylaBoard);
                 if (use)
                     _pendingEffect = Lyla;
                 else
@@ -895,8 +913,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             bool celestiaTribute = target.IsCode(LightswornMonsters) &&
                 (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Celestia));
             bool key = target.IsCode(Lumina, JudgmentDragon) || celestiaTribute;
-            bool use = dies && key;
-            Log($"Necro Gardna on an attack into {target.ID}: {(use ? "yes, key monster" : dies ? "no, not a key monster" : "no, it survives")}");
+            // Javier: when Honest would save it too, Gardna goes and Honest stays for a bigger threat.
+            bool honestWouldGo = (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Honest)) &&
+                (target.Attribute & LightAttribute) != 0 && target.IsAttack() && !target.IsCode(Sacrificable);
+            bool use = dies && (key || honestWouldGo);
+            Log($"Necro Gardna on an attack into {target.ID}: {(use ? key ? "yes, key monster" : "yes, Honest stays in hand" : dies ? "no, not a key monster" : "no, it survives")}");
             return use;
         }
 
@@ -1178,17 +1199,19 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return new[] { Wulf, Plaguespreader, NecroGardna }
                 .Concat(lightsworn.Where(id => GraveCopies(id) == 0 && id != Ryko))
                 .Concat(lightsworn.Where(id => hand.Count(card => card.IsCode(id)) >= 2))
+                .Concat(hand.Where(card => !card.IsCode(JudgmentDragon, Lumina)).OrderBy(HandValue).Select(card => card.ID))
                 .ToArray();
         }
 
-        // Charge: Lyla against their backrow, Lumina when there's something to revive, else a name the GY is missing.
+        // Charge: Lumina when there's something to revive (it can bring Lyla back too, Javier), Lyla against their backrow,
+        // else a name the GY is missing.
         private int[] ChargeSearchOrder(Board board)
         {
             var order = new List<int>();
-            if (HasBackrow(board))
-                order.Add(Lyla);
             if (OwnGrave.Any(id => new[] { Jain, Wulf, Garoth, Lyla, Ehren, Druid }.Any(t => CardIdentity.Same(id, t))))
                 order.Add(Lumina);
+            if (HasBackrow(board))
+                order.Add(Lyla);
             order.AddRange(new[] { Jain, Garoth, Ehren, Lyla, Druid, Ryko, Lumina }
                 .Where(id => GraveCopies(id) == 0 && !InHand(board.Hand, id)));
             order.AddRange(new[] { Lyla, Jain, Ryko, Lumina, Garoth, Ehren, Druid, Wulf });

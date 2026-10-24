@@ -27,6 +27,7 @@ Código: `BattleBoostInHand`, `CanBeBoosted`
 ### Material para tributo
 
 **Cuando invoca a Celestia, tributa un Lightsworn** (su efecto solo se activa así). Fuera de eso, el más barato como siempre.
+- Un Druid boca arriba se tributa último: mientras vive, tus Lightsworn no pueden ser objetivo (Icarus).
 
 Código: `MaterialCost`
 
@@ -39,9 +40,10 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya), ni contra Tytannial (niega el objetivo) ni con Plasma.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
-4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Cuándo Lyla ataca primero (si gana su batalla o pega directo) y el efecto va en Main 2:
-   - con 2 cartas seteadas o más, solo si la Mirror Force del rival ya apareció (en su cementerio o desterrada). Si la Prison se la lleva, igual gastó una backrow. Mientras no apareció, 2 cartas seteadas probablemente la esconden y el efecto va primero, antes de que tus atacantes entren en ella;
-   - con una sola carta seteada y el rival sin monstruos, pega directo primero.
+4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Cuándo y cómo:
+   - **2 cartas seteadas o más, sin monstruo seteado del rival:** efecto con prioridad apenas se invoca. Lo obliga a usar sus trampas de invocación. No ataca primero.
+   - **2 cartas seteadas o más y un monstruo seteado del rival:** sin prioridad. Deja pasar su ventana de invocación (Bottomless) y después activa el efecto en Main 1.
+   - **Una sola carta seteada:** si el rival no tiene monstruos, o solo tiene uno boca abajo, Lyla ataca primero para sacarle un Prison o Mirror Force. Si sobrevive, usa el efecto en Main 2.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
 6. **Celestia** tributando un Lightsworn, si el rival tiene cartas. No contra una Tytannial que pueda negarla (con algo para tributar).
 7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
@@ -77,8 +79,10 @@ Código: `GraveNames`
 - Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
 - Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
 
+**Contra 2 cartas seteadas o más:** si Lyla no puede entrar, va Card Trooper como cebo barato y Lumina espera (Bottomless sobre lo que revive, Icarus).
+
 **Primero Ryko boca abajo** (si no hay otro Ryko seteado). Después:
-1. Lyla, si el rival tiene backrow
+1. Lyla, si el rival tiene backrow, o en el turno 1 yendo primero (el rival queda obligado a setear una backrow que ella rompe, y su mill puede tirar a Wulf)
 2. Ehren, si el rival tiene monstruos boca abajo
 3. Jain
 4. Garoth
@@ -164,7 +168,7 @@ Código: `SolarDiscardOrder`
 ### Charge of the Light Brigade
 
 **Se usa siempre que el mill no deje el deck en el piso.**
-- Qué busca: Lyla si el rival tiene backrow, después Lumina si hay algo para revivir, después un nombre que no esté en el cementerio ni en la mano.
+- Qué busca: Lumina si hay algo para revivir (puede traer a Lyla también), después Lyla si el rival tiene backrow, después un nombre que no esté en el cementerio ni en la mano.
 
 Código: `ChargeSearchOrder`
 
@@ -206,10 +210,10 @@ Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 ### Lumina
 
-**Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip), **y si hay un descarte barato en la mano** (Wulf, Plaguespreader, Necro Gardna o un Lightsworn ya en el cementerio). Nunca descarta un Pot of Avarice u otra magia útil. Con Plasma no se usa.
+**Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip). Si hay objetivo, descarta lo que haga falta, menos Judgment Dragon (algo que usarías enseguida). Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
-- Qué descarta: Wulf, Plaguespreader, Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano.
+- Qué descarta: Wulf, Plaguespreader, Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano, después lo que menos valga en la mano.
 
 Código: `LuminaTarget`, `DiscardOrder`
 
@@ -225,7 +229,8 @@ Código: `SelectDeckCardAsync`
 
 **Solo en la declaración de ataque del rival, para salvar un monstruo clave** que moriría en esa batalla:
 - Lumina o Judgment Dragon;
-- un Lightsworn (Ryko incluido), si tenés Celestia en mano para tributarlo al turno siguiente.
+- un Lightsworn (Ryko incluido), si tenés Celestia en mano para tributarlo al turno siguiente;
+- un LIGHT en ataque que Honest también salvaría: va Gardna y Honest queda para una amenaza mayor.
 - Nunca Card Trooper.
 - También ante un ataque directo que te mataría.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).

@@ -2586,6 +2586,10 @@ namespace BotTest.Game.AI.Brains
             if (card.IsCode(GorzTheEmissaryOfDarkness) && board.OwnMonsters.Any(own => own.IsFaceup() && own.IsAttack()))
                 score += 2000;
 
+            // Wulf only comes out when a Lightsworn mills it: in their hand it's a dead card, back in the deck it's live (Javier).
+            if (card.IsCode(LightswornWulf))
+                score -= 10000;
+
             // Destiny HERO - Plasma is summoned by tributing 3 monsters: live (and urgent) only if they have them.
             if (card.IsCode(DestinyHeroPlasma) && board.EnemyMonsters.Count >= 3)
                 score += 2500;

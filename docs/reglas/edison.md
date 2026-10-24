@@ -375,7 +375,7 @@ Código: `ShouldUseRoyalOppression`, `SpecialSummonUnderway`, `TrySynchroSummon`
 - Primero las manos trampa que castigan los ataques: Gorz (4000, y +2000 más si tenemos monstruos en ataque), Tragoedia (3500), Kalut espejo (2500).
 - Después los que arrancan combos: Stratos (2700), Machina Force (2700), Lonefire Blossom (2600), Quickdraw Synchron, Judgment Dragon, Dark Armed Dragon (2500), Debris Dragon, Machina Gearframe (2000), Caius, Raiza, Thestalos (1800), Card Trooper, Plaguespreader Zombie, Shura, Gale (1500), Bora (1000), Plasma (1000, más 2500 si ya tienen 3 monstruos para tributar).
 - Más el bonus de amenaza, más ATK/10, más 300 si es de nivel 4 o menos (invocable ya).
-- Ajustes: Debris Dragon pierde todo su valor si su GY está vacío (carta muerta). Con el GY vacío, los que buscan del mazo (Gearframe, Stratos) suben 1500. Machina Force baja 1500 si no hay Machina Fortress en su GY.
+- Ajustes: Debris Dragon pierde todo su valor si su GY está vacío (carta muerta). Con el GY vacío, los que buscan del mazo (Gearframe, Stratos) suben 1500. Machina Force baja 1500 si no hay Machina Fortress en su GY. Lightsworn Wulf nunca, salvo que sea el único: en la mano es una carta muerta y de vuelta en el mazo se vuelve viva.
 
 **Lo que vemos de la mano se recuerda** para otras reglas (Gorz, Mirror Force, trampas de ataque, Heavy Storm), pero caduca cuando aparece una copia pública.
 
