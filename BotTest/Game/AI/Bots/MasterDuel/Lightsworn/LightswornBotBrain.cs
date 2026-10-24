@@ -44,6 +44,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private int _bluffTurn = -1;
         private bool _bluff;
         private string? _lastDeckLog;
+        private readonly HashSet<int> _passedSummon = new();
+        private HashSet<int> _setZonesSeen = new();
+        private HashSet<string> _ownMonstersSeen = new();
+        private int _trackTurn = -1;
 
         public LightswornBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -65,6 +69,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _honestBattle = null;
             _bluffTurn = -1;
             _lastDeckLog = null;
+            _passedSummon.Clear();
+            _setZonesSeen = new();
+            _ownMonstersSeen = new();
+            _trackTurn = -1;
         }
 
         protected override int[] SynchroPriority { get; } =
@@ -144,8 +152,33 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private bool CanMill(int cards, Board board) => DeckCount - cards > DeckFloor || OurLethal(board);
 
         // A set card that may be Bottomless or Torrential: Judgment Dragon waits for it to be cleared.
+        // Set cards that already let one of our summons through don't count (see TrackUnansweredSummons).
         private bool SummonTrapPossible(Board board) =>
-            board.EnemySpells.Any(card => !card.IsFaceup()) && OpponentMayStillHave(board, SummonPunishers);
+            board.EnemySpells.Any(card => !card.IsFaceup() && !_passedSummon.Contains(card.CurrentCoordinates.Sequence)) &&
+            OpponentMayStillHave(board, SummonPunishers);
+
+        // Javier: "baje y no uso bottomless asi que baja la probabilidad de que lo tenga". When one of our monsters with
+        // 1500+ ATK appears and their set cards stay the same, those set cards let it through: probably not Bottomless.
+        // Any change in their set cards forgets it (a zone may have been reused).
+        private void TrackUnansweredSummons(Board board)
+        {
+            var setZones = board.EnemySpells.Where(card => !card.IsFaceup()).Select(card => (int)card.CurrentCoordinates.Sequence).ToHashSet();
+            var ownMonsters = board.OwnMonsters.Where(card => card.IsFaceup() && card.Attack >= 1500)
+                .Select(card => $"{card.CurrentCoordinates.Sequence}:{card.ID}").ToHashSet();
+
+            if (!setZones.SetEquals(_setZonesSeen))
+                _passedSummon.Clear();
+            else if (IsBotTurn && _trackTurn == CurrentHeader.CurrentTurn && setZones.Count > 0 && !ownMonsters.IsSubsetOf(_ownMonstersSeen) &&
+                !setZones.IsSubsetOf(_passedSummon))
+            {
+                _passedSummon.UnionWith(setZones);
+                Log($"Their {setZones.Count} set card(s) let our summon through: probably not Bottomless");
+            }
+
+            _setZonesSeen = setZones;
+            _ownMonstersSeen = ownMonsters;
+            _trackTurn = CurrentHeader.CurrentTurn;
+        }
 
         private static bool HasBackrow(Board board) =>
             board.EnemySpells.Any(card => !card.IsFaceup() || IsLastingCard(card));
@@ -161,6 +194,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Lyla's effect only when it can land: backrow to hit, no Stardust to negate it, no Plasma (Javier).
         private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board);
 
+        // Javier: with 2+ set cards, a face-up attack Lyla that wins her battle (or hits directly) attacks first; if a
+        // Prison takes her it still spent a backrow, otherwise her effect breaks one in Main 2. One lone set card is the
+        // threat: effect first.
+        private bool LylaAttacksFirst(Board board) =>
+            IsBotTurn && board.IsMain1 && board.EnemySpells.Count(card => !card.IsFaceup()) >= 2 &&
+            board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked) &&
+            (board.EnemyMonsters.Count == 0 || board.EnemyMonsters.Any(card => !card.IsFaceup() || card.GetRealPower() < 1700));
+
+        private bool LylaEffectNow(Board board) => LylaCanBreak(board) && !LylaAttacksFirst(board);
+
         // Cards we can spend on a cost without losing anything: Wulf (dead in hand), Gardna, Plaguespreader, or a
         // Lightsworn whose name is already in the GY (not Lumina). Pot of Avarice, Charge, Judgment Dragon... are not.
         private bool Expendable(DynamicCard card) =>
@@ -169,6 +212,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         // Why Judgment Dragon comes down (Javier): it gives lethal, or its wipe clears their field. Otherwise only mid-game
         // (never on our first turn) and with no set card of theirs (Dimensional Prison banished it into a backrow).
+        // Outside lethal it waits for Main 2.
         private string? JudgmentReason(Board board)
         {
             if (PlasmaNegates(board))
@@ -177,10 +221,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return "it gives lethal";
             int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
             int ours = board.OwnMonsters.Count + board.OwnSpells.Count;
-            if (theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking)
-                return "its wipe clears their field";
+            bool wipe = theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking;
+
+            // Main 1 only when wiping and then hitting directly wins; otherwise Main 2, after the battle showed their backrow.
+            if (board.IsMain1)
+                return wipe && 3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : null;
+            if (wipe)
+                return "its wipe clears their field (Main 2)";
             if (CurrentHeader.CurrentTurn > 2 && !board.EnemySpells.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Count > 0)
-                return "mid-game beater, no backrow";
+                return "mid-game, no backrow (Main 2)";
             return null;
         }
 
@@ -208,7 +257,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         protected override bool CanUseMonsterEffect(int cardId, Board board, List<DynamicCard> monsterTargets) => cardId switch
         {
-            Lyla => LylaCanBreak(board),
+            Lyla => LylaEffectNow(board),
             JudgmentDragon => JudgmentWipeWorthIt(board),
             // Lumina only with a cheap discard in hand (it threw away a Pot of Avarice).
             Lumina => LuminaTarget(board.Graveyard, board) != 0 && !PlasmaNegates(board) &&
@@ -229,6 +278,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             var state = context.StateData;
             var hand = board.Hand;
             _celestiaSummoning = false;
+
+            TrackUnansweredSummons(board);
 
             string deckLog = $"Deck {DeckCount} cards, {GraveNames()} Lightsworn names in GY";
             if (deckLog != _lastDeckLog)
@@ -260,7 +311,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Lyla breaks a spell/trap (she goes to defense).
-            if (LylaCanBreak(board) && TryActivate(state, Lyla, false, out var lyla))
+            if (LylaEffectNow(board) && TryActivate(state, Lyla, false, out var lyla))
             {
                 _pendingEffect = Lyla;
                 return lyla;
@@ -277,7 +328,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Celestia: tribute a Lightsworn, destroy up to 2 of their cards.
             if (IsBotTurn && board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && CanMill(4, board) &&
-                board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters) && !card.IsCode(Celestia)) &&
+                board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))
             {
                 Log("Tribute summoning Celestia to destroy their cards");
@@ -358,10 +409,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Pot of Avarice: always, unless it takes us below 4 names. With 15 cards or fewer, or low LP, always.
             if (TryGetActivable(state, PotOfAvarice, out _))
             {
-                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000;
+                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2;
                 if ((forced || AvariceKeepsNames()) && TryActivate(state, PotOfAvarice, false, out var avarice))
                 {
-                    Log($"Pot of Avarice{(forced ? " (deck low or LP low)" : "")}");
+                    Log($"Pot of Avarice{(forced ? " (deck low, LP low, or both Judgment Dragons in the GY)" : "")}");
                     _pendingEffect = PotOfAvarice;
                     return avarice;
                 }
@@ -651,11 +702,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             if (card.IsCode(Lyla) && location == CardLocation.MonsterZone)
             {
-                bool use = LylaCanBreak(await BuildBoardAsync());
+                bool use = LylaEffectNow(await BuildBoardAsync());
                 if (use)
                     _pendingEffect = Lyla;
                 else
-                    Log("Lyla's effect skipped: no backrow, or Stardust / Plasma would negate it");
+                    Log("Lyla's effect skipped: no backrow, Stardust / Plasma would negate it, or she attacks first");
                 return use;
             }
 
@@ -783,7 +834,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 use = (turnsIt && !ours.IsCode(Sacrificable)) || lethal;
             }
             else
-                use = ours.IsAttack() && theirs.Attack >= ours.Attack && !ours.IsCode(Sacrificable);
+            {
+                bool celestiaTribute = ours.IsCode(Ryko) && (ownSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Celestia));
+                use = ours.IsAttack() && theirs.Attack >= ours.Attack && (!ours.IsCode(Sacrificable) || celestiaTribute);
+            }
 
             if (use)
             {
@@ -1007,6 +1061,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private bool MissingNamePlan(Board board) =>
             InHand(board.Hand, JudgmentDragon) && GraveNames() == 3 && JudgmentCanLand(board);
 
+        // Javier: holding 2 Celestia, Foolish sends Wulf (it summons itself) and Wulf is the tribute for Celestia, which
+        // breaks 2 of their cards. Only without a Lightsworn already on the field to tribute.
+        private bool WulfForCelestiaPlan(Board board) =>
+            IsBotTurn && board.IsMain1 && board.Hand.Count(card => card.IsCode(Celestia)) >= 2 &&
+            board.EnemyMonsters.Count + board.EnemySpells.Count >= 2 && CanMill(5, board) &&
+            !board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
+            GraveCopies(Wulf) + board.Hand.Count(card => card.IsCode(Wulf)) < 3;
+
         private string? FoolishPlan(Board board)
         {
             if (!CanMill(1, board))
@@ -1015,6 +1077,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return "Necro Gardna, protects a Lightsworn for Celestia's tribute";
             if (PlaguespreaderFoolishPlan(board))
                 return "Plaguespreader for a synchro this turn";
+            if (WulfForCelestiaPlan(board))
+                return "Wulf summons itself and is tributed for Celestia";
             if (MissingNamePlan(board))
                 return "the 4th name, Judgment Dragon comes down this turn";
             return null;
@@ -1028,6 +1092,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 order.Add(NecroGardna);
             if (PlaguespreaderFoolishPlan(board))
                 order.Add(Plaguespreader);
+            if (WulfForCelestiaPlan(board))
+                order.Add(Wulf);
             order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
             order.AddRange(new[] { Wulf, NecroGardna, Plaguespreader });
             order.AddRange(LightswornMonsters);
@@ -1072,8 +1138,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                         ourAttack - materialAttack + stats.Attack >= CurrentField.EnemySide.LifePoints;
                     if (material.IsCode(CardTrooper) && !lethal && !OpponentHasLethal(board))
                         continue;
-                    // Brionac costs another discard: only for lethal (below).
-                    if (synchro != BrionacDragonOfTheIceBarrier && ScoreSynchro(synchro, board) > 30)
+                    // Brionac costs another discard: a value play only with two cheap cards (one for the top of the
+                    // deck, one for its bounce), else only for lethal (below).
+                    bool brionacPaid = board.Hand.Count(card => !card.IsCode(FoolishBurial) && Expendable(card)) >= 2;
+                    if (ScoreSynchro(synchro, board) > 30 && (synchro != BrionacDragonOfTheIceBarrier || brionacPaid))
                         return true;
                     if (lethal)
                         return true;

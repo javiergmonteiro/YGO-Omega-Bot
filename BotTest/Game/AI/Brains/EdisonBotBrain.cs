@@ -436,6 +436,10 @@ namespace BotTest.Game.AI.Brains
                     return response.Value;
             }
 
+            var judgmentWipe = DecideJudgmentDragon(state, board);
+            if (judgmentWipe.HasValue)
+                return judgmentWipe.Value;
+
             response = DecideSets(context, board);
             if (response.HasValue)
                 return response.Value;
@@ -870,6 +874,28 @@ namespace BotTest.Game.AI.Brains
                 TargetingBlocked = _targetingBlocked,
                 VsGladiatorBeasts = OpponentPlaysArchetype(GladiatorBeastPrefix),
             };
+        }
+
+        // A Judgment Dragon we control without a deck rule for it (stolen with Brain Control, 2026-10-23: the Blackwings bot
+        // held one that won the game). Its wipe (1000 LP) when it then hits for the win, or when they have 2+ cards more.
+        private IdleCmdResponse? DecideJudgmentDragon(IdleCmdData state, Board board)
+        {
+            if (!IsBotTurn || MonsterEffectCards.Any(id => CardIdentity.Same(id, JudgmentDragon)) ||
+                CurrentField.OwnSide.LifePoints <= 1000 || board.StardustBlocking)
+                return null;
+            var judgment = board.OwnMonsters.Where(card => card.IsCode(JudgmentDragon) && card.IsFaceup()).ToList();
+            if (judgment.Count == 0)
+                return null;
+
+            int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
+            int ours = board.OwnMonsters.Count(card => !card.IsCode(JudgmentDragon)) + board.OwnSpells.Count;
+            bool wins = board.IsMain1 && theirs > 0 && judgment.Any(card => card.IsAttack() && !card.Attacked && card.Attack >= CurrentField.EnemySide.LifePoints);
+            if (!wins && theirs - ours < 2)
+                return null;
+            if (!TryActivate(state, JudgmentDragon, false, out var response))
+                return null;
+            Log($"Judgment Dragon's wipe: {(wins ? "then it hits directly for the win" : "they have 2+ cards more")}");
+            return response;
         }
 
         private async Task<IdleCmdResponse?> DecideMonsterEffectsAsync(IdleCmdData state, Board board)
@@ -2280,11 +2306,13 @@ namespace BotTest.Game.AI.Brains
                 return CardPosition.FaceUpDefence;
             }
 
-            // No battle left for us this turn (turn 1, Main Phase 2): an indestructible monster waits in defense, so they
-            // can't crash a Machina Fortress into it to trigger its effect. Nothing is lost: it couldn't attack anyway.
+            // No battle left for us this turn (turn 1, Main Phase 2) and a Machina Fortress on their side: an indestructible
+            // monster waits in defense, so they can't crash the Fortress into it to trigger its effect. Otherwise it stays in
+            // attack: in defense, Ehren sent Armor Master back to the deck (2026-10-23).
             var phase = (DuelPhase)context.Header.CurrentPhase;
             bool noBattleThisTurn = context.Header.CurrentTurn == 1 || phase == DuelPhase.Main2;
-            if (fearless && noBattleThisTurn && positions.Contains((byte)CardPosition.FaceUpDefence))
+            bool fortressThere = enemies.Any(card => card.IsFaceup() && card.IsCode(PunishesBattleDestruction));
+            if (fearless && noBattleThisTurn && fortressThere && positions.Contains((byte)CardPosition.FaceUpDefence))
             {
                 Log($"{cardId} in defense: it can't attack this turn");
                 return CardPosition.FaceUpDefence;

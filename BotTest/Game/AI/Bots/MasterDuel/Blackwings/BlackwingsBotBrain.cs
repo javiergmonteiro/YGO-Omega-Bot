@@ -167,7 +167,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
                  (board.EnemySpells.Any(card => !card.IsFaceup()) && monsterTargets.All(card => !card.IsFaceup() || card.GetRealPower() < 1900))),
             // Tokens aren't worth a banish from the GY.
             DarkArmedDragon => monsterTargets.Count(card => (card.Type & CardKnowledge.TokenType) == 0) + board.EnemySpells.Count > 0,
-            DarkEndDragon or BlackwingArmorMaster => monsterTargets.Count > 0,
+            DarkEndDragon => monsterTargets.Count > 0,
+            // Armor Master's 0 ATK/DEF lasts this turn only: in Main 1, with an attacker of ours still to attack. In Main 2
+            // it was wasted (2026-10-23, Javier: "deberia haberlo usado el siguiente turno").
+            BlackwingArmorMaster => monsterTargets.Count > 0 && IsBotTurn && board.IsMain1 &&
+                board.OwnMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked),
             SiroccoTheDawn => board.IsMain1 && !_synchroAvailable && MarkSiroccoUsed(SiroccoPumpTarget(board.OwnMonsters, board.EnemyMonsters)),
             _ => true
         };

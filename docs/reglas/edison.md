@@ -467,6 +467,15 @@ Código: `DecideGenericOpeningAsync` (stormEdge), `DecideSets`
 
 Código: `DecideGenericOpeningAsync`, `HasPlanForStolenMonster`, `DecideGenericAttackAsync` (robados)
 
+### Judgment Dragon propio o robado
+
+**Si controlás un Judgment Dragon sin regla del mazo (por ejemplo robado con Brain Control), usa su efecto** (1000 LP, destruye todas las demás cartas):
+- si después JD pega directo y gana (Main 1, todavía no atacó, su ATK alcanza la vida del rival), o
+- si el rival tiene 2 cartas o más que vos en el campo.
+- No con 1000 LP o menos ni con Stardust activo.
+
+Código: `DecideJudgmentDragon`
+
 ### Allure of Darkness
 
 **Se juega si tenemos en la mano otro monstruo DARK.**
@@ -527,7 +536,7 @@ Código: `IsStardustActive`, `IsStardustBlocking`, `ShouldUsePrison`
 
 **Ataques contra Fortress:**
 - Un monstruo importante no lo ataca (se pierde por su efecto), salvo que sea robado.
-- Armor Master no ataca si solo hay Fortress en su campo, y se invoca/queda en defensa; también se queda en defensa si no habrá batalla este turno (turno 1 o Main 2) para que no le estrellen una Fortress.
+- Armor Master no ataca si solo hay Fortress en su campo, y se invoca/queda en defensa; también se queda en defensa si no habrá batalla este turno (turno 1 o Main 2) y el rival tiene una Fortress boca arriba, para que no se la estrellen. Si no, queda en ataque (en defensa Ehren la devolvió al deck).
 - Goyo no roba una Fortress ni la ataca primero.
 - Los hechizos/trampas que apuntan (Prison, MST, Icarus) no lo penalizan: solo se evitan los efectos de monstruo.
 

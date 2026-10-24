@@ -39,7 +39,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya), ni contra Tytannial (niega el objetivo) ni con Plasma.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
-4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma).
+4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Con 2 cartas seteadas o más y una batalla que Lyla gana (o ataque directo), primero ataca y el efecto va en Main 2 (si una Prison se la lleva, igual gastó una backrow). Con una sola carta seteada, el efecto va primero.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
 6. **Celestia** tributando un Lightsworn, si el rival tiene cartas.
 7. **Judgment Dragon** (ver su ficha).
@@ -100,7 +100,10 @@ Código: `DecideNormalSummon`
 - da lethal ese turno;
 - su efecto limpia el campo del rival (2 cartas o más que vos, 2000 LP o más);
 - mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
+- **Main 1 solo si gana:** da lethal, o el efecto limpia y JD pega directo por la victoria. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
 - Sin motivo, espera. Con Plasma boca arriba no se invoca.
+
+**Probabilidad de Bottomless:** si invocás un monstruo de 1500+ y el rival lo deja pasar con sus cartas seteadas, esas cartas cuentan como "probablemente no Bottomless" y no frenan a JD ni al synchro. Si el rival cambia sus cartas seteadas, se olvida.
 
 **Y aun así espera si:**
 - una carta seteada del rival pueda ser Bottomless o Torrential (las que todavía le puedan quedar). Excepción: el rival tiene lethal en campo (es la única jugada para no perder);
@@ -135,7 +138,7 @@ Código: `FindTragoediaSteal`
 
 ### Pot of Avarice
 
-**Se usa si después quedan 4 nombres en el cementerio.** Con 15 cartas o menos en el deck, o con 2000 LP o menos, se usa sí o sí.
+**Se usa si después quedan 4 nombres en el cementerio.** Con 15 cartas o menos en el deck, con 2000 LP o menos, o con los 2 JD en el cementerio (vuelven al deck), se usa sí o sí.
 - Devuelve en este orden: las copias repetidas, los demás monstruos, JD, una copia de cada nombre y, por último, Necro Gardna y Plaguespreader.
 
 Código: `AvariceKeepsNames`, `AvaricePicks`
@@ -173,7 +176,8 @@ Código: `DecideSpells`
 **Solo se usa con un plan para ese turno:**
 1. Necro Gardna, si tenés Celestia en mano y un Lightsworn en el campo.
 2. Plaguespreader, si se cumple su plan de synchro (ver su ficha).
-3. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
+3. Wulf, si tenés 2 Celestia en mano, el rival tiene 2 cartas o más y no hay un Lightsworn en tu campo: Wulf se invoca solo y es el tributo de Celestia, que rompe 2.
+4. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
 - Si no hay plan, no se usa.
 
 Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
@@ -183,7 +187,7 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 **Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
 - El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.
-- Brionac solo si da lethal: cuesta otro descarte más.
+- Brionac como jugada de valor solo si tenés 2 cartas baratas en mano (una va arriba del deck y la otra paga su efecto); si no, solo si da lethal.
 - Para revivirlo pone una carta de la mano arriba del deck, y tiene que ser barata: Wulf, Necro Gardna, Plaguespreader o un Lightsworn cuyo nombre ya está en el cementerio (no Lumina). Si no hay, no se hace (economía de cartas).
 
 Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
@@ -200,7 +204,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 ### Ryko, Celestia y Lyla
 
 **Rompen primero la backrow boca abajo del rival**, después las cartas continuas y después los monstruos por amenaza (los tokens al final).
-- Celestia destruye 2 si puede. Su efecto se saltea si moler 4 lo deja en el piso.
+- Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 
 Código: `SelectDeckCardAsync`
 
@@ -241,7 +245,7 @@ Código: `DecideOwnEffectAsync`
 **En el damage step:**
 - Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana, o si con Honest el daño da lethal.
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
-- Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal.
+- Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal o que Ryko sea el tributo de Celestia (en mano) para el turno siguiente.
 - Una vez por batalla.
 
 **Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP.

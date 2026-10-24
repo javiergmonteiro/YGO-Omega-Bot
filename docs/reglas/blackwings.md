@@ -279,7 +279,7 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 - Black Rose: solo si estás muy atrás.
 
 **Efectos de monstruo del Extra Deck usados en la Main (en este orden)**
-- Blackwing Armor Master: si el rival tiene al menos un monstruo objetivo.
+- Blackwing Armor Master: si el rival tiene al menos un monstruo objetivo, solo en tu Main 1 y con un atacante tuyo que todavía no atacó (el 0 de ATK/DEF dura solo ese turno; en Main 2 se desperdiciaba).
 - Dark End Dragon: si el rival tiene al menos un monstruo objetivo.
 - Brionac: solo si tenés en mano una carta de valor 2 o menos para pagar, y el rival tiene un monstruo con amenaza 2500+, una mágica/trampa boca arriba, o backrow seteado con monstruos chicos (menos de 1900).
 - Armed Wing, Silverwind y los demás: no hay regla propia (el código no dice nada del Extra Deck más allá de la prioridad).

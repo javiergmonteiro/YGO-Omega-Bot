@@ -254,3 +254,13 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 ### Celestia
 - Se tributa (idealmente un Ryko ya usado) para destruir 2 cartas. Prioridad: backrow que impide JD, después monstruos.
+
+## Aprendido de tus partidas (2026-10-23)
+
+- Lyla: con 2 backrows o más y una batalla que gana, ataca primero (si cae en Prison igual gastó una backrow) y usa el efecto en Main 2. Con una sola backrow, efecto primero.
+- JD: fuera de lethal se baja en Main 2, después de que la batalla mostró la backrow (que otro monstruo se coma el Mirror Force).
+- Foolish → Wulf como tributo de Celestia si tengo 2 Celestia en mano. Celestia puede tributar otra Celestia.
+- Pot of Avarice sube de prioridad con los 2 JD en el cementerio.
+- Si el rival deja pasar una invocación con backrow, baja la probabilidad de que tenga Bottomless.
+- Brionac como jugada de valor si el descarte es una carta muerta.
+- Honest para mantener vivo a un Ryko que voy a tributar para Celestia.
