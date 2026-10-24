@@ -36,7 +36,7 @@ Código: `MaterialCost`
 
 Orden en que el bot decide en la Main Phase (la primera regla que se cumple, juega y vuelve a preguntar). Antes corren las aperturas generales (Trap Dustshoot, Heavy Storm cuando conviene, etc.). Después corren los efectos de monstruo y los sets de trampas. El resto del fallback genérico no invoca, no setea ni activa ninguna carta del mazo.
 
-1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No contra Tytannial (niega el objetivo) ni con Plasma.
+1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya), ni contra Tytannial (niega el objetivo) ni con Plasma.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
 4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma).
@@ -208,11 +208,20 @@ Código: `SelectDeckCardAsync`
 
 **Solo en la declaración de ataque del rival, para salvar un monstruo clave** que moriría en esa batalla:
 - Lumina o Judgment Dragon;
-- un Lightsworn que no sea Ryko, si tenés Celestia en mano para tributarlo al turno siguiente.
+- un Lightsworn (Ryko incluido), si tenés Celestia en mano para tributarlo al turno siguiente.
+- Nunca Card Trooper.
 - También ante un ataque directo que te mataría.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
 
 Código: `ShouldUseGardnaAsync`
+
+### Ryko y Card Trooper son sacrificables
+
+**Están para el trade 1 a 1** (el robo de Card Trooper es parte de la gracia):
+- No se gasta nada para salvarlos: ni Necro Gardna (salvo Ryko con el plan de Celestia), ni Honest, ni Mirror Force.
+- Card Trooper no va de material de synchro salvo que dé lethal o que el rival tenga lethal; es el último material elegido.
+
+Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 
 ### Card Trooper
 
@@ -220,14 +229,24 @@ Código: `ShouldUseGardnaAsync`
 
 Código: `OnAnnounceNumberAsync`
 
+### Mirror Force
+
+**La regla general de Edison, salvo que el ataque vaya a un sacrificable** (Ryko, Card Trooper) **o a un Lightsworn cuya muerte da el 4º nombre:** ahí se deja morir.
+- Excepción: el rival tiene 2 atacantes o más que tus monstruos (ventaja numérica); ahí se activa igual.
+
+Código: `DecideOwnEffectAsync`
+
 ### Honest
 
 **En el damage step:**
-- Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana.
+- Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana, o si con Honest el daño da lethal.
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
+- Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal.
 - Una vez por batalla.
 
-Código: `ShouldUseHonest`
+**Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP.
+
+Código: `ShouldUseHonest`, `DecideNormalSummon`
 
 ### Threatening Roar
 

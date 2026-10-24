@@ -117,6 +117,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int cost = base.MaterialCost(card);
             if (_celestiaSummoning && !card.IsCode(LightswornMonsters))
                 cost += 10000;
+            if (card.IsCode(CardTrooper))
+                cost += 5000;
             return cost;
         }
 
@@ -147,6 +149,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         private static bool HasBackrow(Board board) =>
             board.EnemySpells.Any(card => !card.IsFaceup() || IsLastingCard(card));
+
+        // Ryko and Card Trooper are there to trade 1-for-1 (Card Trooper's draw is part of the deal): no Gardna, Honest
+        // or Mirror Force to save them, and Trooper is no synchro material unless it wins or saves the game (Javier).
+        private static readonly int[] Sacrificable = { Ryko, CardTrooper };
 
         // A face-up Destiny HERO - Plasma negates our monsters' effects: Lyla, Ryko, Lumina, Judgment Dragon do nothing.
         private static bool PlasmaNegates(Board board) =>
@@ -230,8 +236,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _lastDeckLog = deckLog;
 
             // Ryko set last turn: flip it first thing, breaking their backrow, before anything else (Javier).
-            // Not into Tytannial (it negates the targeting) or Plasma.
+            // Not into Tytannial (it negates the targeting) or Plasma, and not when they have no card (it would hit ours).
             if (IsBotTurn && board.IsMain1 && TryGetReposable(state, Ryko, out var ryko) && !ryko.IsFaceup() && CanMill(3, board) &&
+                board.EnemyMonsters.Count + board.EnemySpells.Count > 0 &&
                 !IsTytannialActive(board.EnemyMonsters) && !PlasmaNegates(board))
             {
                 Log("Flip summoning Ryko");
@@ -565,9 +572,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 Log("Honest pokes: no real threat on their side");
                 return honest.NormalSummon();
             }
-            if (CurrentField.OwnSide.LifePoints < 3000 && ownMonsters.Count == 0 && TryGetMonsterSettable(state, Honest, out var honestWall))
+            int theirBestAttack = board.EnemyMonsters.Where(m => m.IsFaceup() && m.IsAttack()).Select(m => m.Attack).DefaultIfEmpty(0).Max();
+            if (ownMonsters.Count == 0 && (CurrentField.OwnSide.LifePoints < 3000 || (board.EnemyMonsters.Count > 0 && theirBestAttack < 1900)) &&
+                TryGetMonsterSettable(state, Honest, out var honestWall))
             {
-                Log("Setting Honest as a wall (below 3000 LP)");
+                Log("Setting Honest as a wall (its 1900 DEF holds, or below 3000 LP)");
                 return honestWall.SetMonster();
             }
 
@@ -665,6 +674,22 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Threatening Roar: on their turn, once they head into battle with something that can hurt us.
+            if (card.IsCode(MirrorForce))
+            {
+                var ownSide = CurrentField.OwnSide;
+                if (!ownSide.HasBattlingMonster)
+                    return null;
+                var target = ownSide.BattlingMonster;
+                bool fourthName = target.IsCode(LightswornMonsters) && GraveNames() == 3 && GraveCopies(target.ID) == 0;
+                if (!target.IsCode(Sacrificable) && !fourthName)
+                    return null;
+                int theirAttackers = (await GetEnemyMonsterCardsAsync()).Count(monster => monster.IsFaceup() && monster.IsAttack());
+                int ours = (await GetBotMonsterCardsAsync()).Count;
+                bool outnumbered = theirAttackers - ours >= 2;
+                Log($"Mirror Force on an attack into {target.ID}: {(outnumbered ? "yes, they have 2+ attackers more" : fourthName ? "no, its death brings the 4th name" : "no, it's a sacrificable 1-for-1")}");
+                return outnumbered;
+            }
+
             if (card.IsCode(ThreateningRoar))
             {
                 var phase = (DuelPhase)CurrentHeader.CurrentPhase;
@@ -678,7 +703,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         }
 
         // Necro Gardna only on an attack declaration, to save a key monster (Javier): Lumina, Judgment Dragon, or a
-        // Lightsworn other than Ryko when Celestia in hand wants it as tribute next turn. Also a direct attack that kills.
+        // Lightsworn (Ryko included) when Celestia in hand wants it as tribute next turn. Also a direct attack that kills.
         private async Task<bool> ShouldUseGardnaAsync()
         {
             var enemySide = CurrentField.EnemySide;
@@ -699,7 +724,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             var target = ownSide.BattlingMonster;
             bool dies = attack >= target.GetRealPower();
-            bool celestiaTribute = target.IsCode(LightswornMonsters) && !target.IsCode(Ryko) &&
+            bool celestiaTribute = target.IsCode(LightswornMonsters) &&
                 (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Celestia));
             bool key = target.IsCode(Lumina, JudgmentDragon) || celestiaTribute;
             bool use = dies && key;
@@ -750,9 +775,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int theirPower = theirs.GetRealPower();
             bool use;
             if (IsBotTurn)
-                use = ours.Attack <= theirPower && ours.Attack + theirs.Attack > theirPower;
+            {
+                bool turnsIt = ours.Attack <= theirPower && ours.Attack + theirs.Attack > theirPower;
+                // With Honest the damage is our own ATK (we gain exactly theirs): lethal it wasn't before.
+                int lifePoints = CurrentField.EnemySide.LifePoints;
+                bool lethal = theirs.IsAttack() && ours.Attack >= lifePoints && ours.Attack - theirs.Attack < lifePoints;
+                use = (turnsIt && !ours.IsCode(Sacrificable)) || lethal;
+            }
             else
-                use = ours.IsAttack() && theirs.Attack >= ours.Attack;
+                use = ours.IsAttack() && theirs.Attack >= ours.Attack && !ours.IsCode(Sacrificable);
 
             if (use)
             {
@@ -1036,12 +1067,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             {
                 foreach (var (synchro, stats) in Synchros.Where(x => x.Value.Level == material.Level + 2).Select(x => (x.Key, x.Value)))
                 {
-                    // Brionac costs another discard: only for lethal (below).
-                    if (synchro != BrionacDragonOfTheIceBarrier && ScoreSynchro(synchro, board) > 30)
-                        return true;
                     int materialAttack = material.IsAttack() && !material.Attacked ? material.Attack : 0;
                     bool lethal = board.IsMain1 && board.EnemyMonsters.Count == 0 &&
                         ourAttack - materialAttack + stats.Attack >= CurrentField.EnemySide.LifePoints;
+                    if (material.IsCode(CardTrooper) && !lethal && !OpponentHasLethal(board))
+                        continue;
+                    // Brionac costs another discard: only for lethal (below).
+                    if (synchro != BrionacDragonOfTheIceBarrier && ScoreSynchro(synchro, board) > 30)
+                        return true;
                     if (lethal)
                         return true;
                 }

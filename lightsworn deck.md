@@ -202,6 +202,13 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 
 ### Trap Dustshoot y Mirror Force
 - Las reglas que ya teníamos.
+- Mirror Force: no usarla para salvar a Ryko, Card Trooper o algo sacrificable cuya muerte da el 4º nombre. Como regla general, se usa si el rival tiene ventaja numérica (2 monstruos más que yo).
+
+### Ryko y Card Trooper (sacrificables)
+- Están para el trade 1 a 1: no gastar recursos para salvarlos (la gracia de Trooper es robar una carta).
+- Nada que niegue ataques para salvar a Ryko, salvo que haya plan de bajar Celestia el próximo turno.
+- Ryko se flipea siempre en Main 1 antes de hacer algo, salvo que el rival no tenga cartas (destruiría las mías).
+- Card Trooper no se usa para synchro salvo que sea extremadamente necesario.
 
 ### Wulf
 - Primer descarte para todo (Solar Recharge, Lumina, Reincarnation): en mano es una carta muerta.
@@ -221,7 +228,7 @@ Variante pura. La variante Chaos la redacta Javier más adelante.
 - **Qué descartar:** Wulf, después Plaguespread, después Necro Gardna, después un Lightsworn repetido. Nunca una carta útil como Pot of Avarice: si no hay descarte barato, no se usa.
 
 ### Honest
-- Carta clave: elimina amenazas o mantiene vivos a mis monstruos. Se usa siempre en el damage step.
+- Carta clave: elimina amenazas o mantiene vivos a mis monstruos. Se usa siempre en el damage step, seguido, tanto ofensiva como defensivamente (salvo para salvar a Ryko o Card Trooper).
   - Para ganar si tengo lethal.
   - Para bajar monstruos amenazantes (Stardust, Elemental Hero Absolute Zero, etc.).
 - **Bluff:** bajar un Lightsworn en ataque (aunque sea Druid) para que el rival dude si atacar. 3 de cada 10 veces se hace sin tener Honest; si lo tengo, siempre.
