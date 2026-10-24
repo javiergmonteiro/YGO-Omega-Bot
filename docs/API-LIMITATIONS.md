@@ -72,6 +72,7 @@ Cada entrada tiene:
 ## 3. Trampas del framework (`DeckBotBrain` / `GameField`)
 
 - **Perspectiva invertida:** `GetPlayerCardsInZone*` lee el lado del **jugador humano** (el rival), no el del bot. El lado propio sale de `CurrentField.GetCardsInLocation(...)`. Para la zona de magias y trampas propia está `GetOwnSpellCardsAsync`.
+- **`CurrentField.OwnSide/EnemySide` se pisaban con la vista del jugador (corregido 2026-10-24):** `RefreshFieldAsync(Player)` guardaba su resultado en el mismo `_fieldInfo`. Después de cualquier `GetEnemy*Async`, `OwnSide` era el lado del humano: sus LP y su `BattlingMonster`. Así Honest no salió nunca y las condiciones de LP leían los del rival. Ahora solo la vista del bot queda guardada. Si una regla vieja parece "ajustada al revés", revisala con esto en mente.
 - **Listas enemigas con IDs reales:** las listas del enemigo vienen desde la perspectiva del jugador, donde sus cartas boca abajo muestran el ID real. Las reglas no deben espiar esos IDs (ver el punto de controller + sequence de arriba).
 - **`SelectSum` del framework:** ignora el tuner obligatorio y los combos de una sola carta. Por eso se usa `FindCheapestSum` propio.
 - **Ataque base:** saltea a los monstruos rivales negados (`IsDisabled`), por ejemplo con Plasma. Por eso se usa `DecideGenericAttackAsync` propio.

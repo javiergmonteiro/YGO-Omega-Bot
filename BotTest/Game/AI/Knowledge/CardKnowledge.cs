@@ -30,6 +30,10 @@ namespace BotTest.Game.AI.Knowledge
         public const int AllyOfJusticeCatastor = 26593852;
         public const int BrionacDragonOfTheIceBarrier = 50321816;
         public const int MagicalAndroid = 43385557;
+        public const int CardTrooper = 85087012;
+        // Lightsworn Druid: Lightsworn monsters can't be targeted by card effects while it's face-up.
+        public const int LightswornDruid = 7183297;
+        public static readonly int[] LightswornNames = { 94381039, 58996450, 59019082, 96235295, 22624393, 44178906, 7183297, 95503707, 21502816 };
 
         public const int UpstartGoblin = 70368879;
         public const int AllureOfDarkness = 1475311;

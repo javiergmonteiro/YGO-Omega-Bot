@@ -479,6 +479,7 @@ namespace BotTest.Game.AI.Brains
                 // With a pump in hand (Kalut) that makes it win against their strongest monster, a monster stays in
                 // attack: if they attack it, the pump wins the battle (and Shura's effect triggers on their turn too).
                 .Where(card => !(card.IsAttack() && canPump && card.Attack + BattleBoostInHand(board.Hand) > strongestEnemyAttack))
+                .Where(card => !(card.IsFaceup() && card.IsAttack() && KeepsAttackAsBluff(card, strongestEnemyAttack)))
                 .ToArray();
             // No rule played anything: what the engine still offered, so "why did it pass with X in hand" has an answer
             // (2026-10-21: Brain Control, Black Whirlwind and Sirocco stayed in hand with nothing logged).
@@ -1656,7 +1657,9 @@ namespace BotTest.Game.AI.Brains
             bool use = card.ID switch
             {
                 DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints) && !StrongerAttackerWaiting(attacker, enemyMonsters, lifePoints),
-                MirrorForce => attacker.HasValue && (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
+                // Not on a lone Card Trooper: it draws them a card when destroyed, a +1 for them (Javier).
+                MirrorForce => attacker.HasValue && !LoneCardTrooper(attacker.Value, enemyMonsters, lifePoints) &&
+                    (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),
@@ -1912,6 +1915,10 @@ namespace BotTest.Game.AI.Brains
             return null;
         }
 
+        private static bool LoneCardTrooper(DynamicCard attacker, List<DynamicCard> enemyMonsters, int lifePoints) =>
+            attacker.IsCode(CardTrooper) && attacker.Attack < lifePoints &&
+            enemyMonsters.Where(monster => monster.IsAttack()).All(monster => monster.IsCode(CardTrooper));
+
         private async Task<bool> ShouldUseIcarus(List<DynamicCard> enemyMonsters, List<DynamicCard> enemySpells)
         {
             if (enemyMonsters.Count + enemySpells.Count < 2)
@@ -1942,7 +1949,11 @@ namespace BotTest.Game.AI.Brains
             // Otherwise compare what it takes (the two most valuable targets) with what it costs:
             // Icarus itself plus the monster we tribute (the cheapest one, by MaterialCost; half its value,
             // since it's usually a body that already did its job).
-            var targets = enemyMonsters.Where(card => !IsProtectedByUnion(card, enemySpells)).Concat(enemySpells)
+            // A face-up Lightsworn Druid makes their Lightsworn untargetable: Icarus fell on our own Bora and Sirocco
+            // (2026-10-24).
+            bool druidShield = enemyMonsters.Any(card => card.IsFaceup() && card.IsCode(LightswornDruid) && !card.IsDisabled());
+            var targets = enemyMonsters.Where(card => !IsProtectedByUnion(card, enemySpells))
+                .Where(card => !druidShield || !card.IsFaceup() || !card.IsCode(LightswornNames)).Concat(enemySpells)
                 .Where(card => card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !card.IsFaceup() || IsLastingCard(card))
                 .Select(RemovalValue)
                 .OrderByDescending(value => value)
@@ -2344,6 +2355,9 @@ namespace BotTest.Game.AI.Brains
             Chain.MarkOwnAction(context.Header);
             return true;
         }
+
+        /// <summary>A face-up attacker the deck keeps in attack even though something of theirs beats it (a bluff).</summary>
+        protected virtual bool KeepsAttackAsBluff(DynamicCard card, int strongestEnemyAttack) => false;
 
         /// <summary>Our monsters whose effect special summons (Royal Oppression negates and destroys them).</summary>
         protected virtual int[] OurSpecialSummonEffects => Array.Empty<int>();

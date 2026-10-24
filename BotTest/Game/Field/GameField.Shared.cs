@@ -14,14 +14,18 @@ namespace BotTest.Game.Field
 
         private async Task<FieldInfo> RefreshFieldAsync(FieldPerspective perspective)
         {
-            _fieldInfo = perspective switch
+            // Only the bot's view is kept as OwnSide/EnemySide: caching the player's view swapped both sides for every
+            // rule reading CurrentField after an enemy list (2026-10-24: Honest never fired, it saw our monster as theirs).
+            switch (perspective)
             {
-                FieldPerspective.Bot => await _botWrapper.GetBotFieldInfo(),
-                FieldPerspective.Player => await DuelBotWrapper.GetPlayerFieldInfo(),
-                _ => throw new ArgumentOutOfRangeException(nameof(perspective))
-            };
-
-            return _fieldInfo;
+                case FieldPerspective.Bot:
+                    _fieldInfo = await _botWrapper.GetBotFieldInfo();
+                    return _fieldInfo;
+                case FieldPerspective.Player:
+                    return await DuelBotWrapper.GetPlayerFieldInfo();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(perspective));
+            }
         }
 
         private Task<DynamicCard> GetFieldCardAsync(

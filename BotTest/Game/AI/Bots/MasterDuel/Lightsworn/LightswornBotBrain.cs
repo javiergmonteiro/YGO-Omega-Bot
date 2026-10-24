@@ -206,13 +206,26 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Lyla's effect only when it can land: backrow to hit, no Stardust to negate it, no Plasma (Javier).
         private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board);
 
-        // Javier: with 2+ set cards, a face-up attack Lyla that wins her battle (or hits directly) attacks first; if a
-        // Prison takes her it still spent a backrow, otherwise her effect breaks one in Main 2. One lone set card is the
-        // threat: effect first.
-        private bool LylaAttacksFirst(Board board) =>
-            IsBotTurn && board.IsMain1 && board.EnemySpells.Count(card => !card.IsFaceup()) >= 2 &&
-            board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked) &&
-            (board.EnemyMonsters.Count == 0 || board.EnemyMonsters.Any(card => !card.IsFaceup() || card.GetRealPower() < 1700));
+        // Javier: a face-up attack Lyla that wins her battle (or hits directly) attacks first and breaks a card in Main 2:
+        //  - 2+ set cards once their Mirror Force is gone (if a Prison takes her it still spent a backrow). While Mirror
+        //    Force hasn't shown up, 2+ sets likely hide it: effect first, before our attackers walk into it.
+        //  - 1 lone set card with no monster of theirs: she hits directly first.
+        private bool LylaAttacksFirst(Board board)
+        {
+            if (!IsBotTurn || !board.IsMain1 ||
+                !board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked))
+                return false;
+            int sets = board.EnemySpells.Count(card => !card.IsFaceup());
+            if (sets == 1)
+                return board.EnemyMonsters.Count == 0;
+            return sets >= 2 && TheirMirrorForceGone() &&
+                (board.EnemyMonsters.Count == 0 || board.EnemyMonsters.Any(card => !card.IsFaceup() || card.GetRealPower() < 1700));
+        }
+
+        // Mirror Force is limited: once it's in their GY or banished, no set card of theirs is one.
+        private bool TheirMirrorForceGone() =>
+            (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).Concat(CurrentField.EnemySide.Banish ?? Array.Empty<int>())
+                .Any(id => CardIdentity.Same(id, MirrorForce));
 
         private bool LylaEffectNow(Board board) => LylaCanBreak(board) && !LylaAttacksFirst(board);
 
@@ -241,6 +254,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (board.IsMain1 && stardustToHit && !SummonTrapPossible(board))
                 return "attacks Stardust (its wipe waits for Main 2)";
 
+            // Two Judgment Dragons (Javier): the first comes down in Main 1 and wipes, the second follows and both attack.
+            bool judgmentUp = board.OwnMonsters.Any(card => card.IsCode(JudgmentDragon) && card.IsFaceup());
+            if (board.IsMain1 && !judgmentUp && SecondJudgmentReady(board) && theirs - ours >= 2 &&
+                CurrentField.OwnSide.LifePoints > 1000 && !board.StardustBlocking)
+                return "the first of two: it wipes, the second follows and both attack";
+            if (board.IsMain1 && judgmentUp && board.EnemyMonsters.Count == 0)
+                return "joins the other Judgment Dragon's attack on an empty field";
+
             // Main 1 only when wiping and then hitting directly wins; otherwise Main 2, after the battle showed their backrow.
             if (board.IsMain1)
                 return wipe && 3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : null;
@@ -266,10 +287,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 int ourAttack = board.OwnMonsters.Where(card => card.IsCode(JudgmentDragon) && card.IsFaceup() && card.IsAttack() && !card.Attacked)
                     .Sum(card => card.Attack);
                 bool winsNow = IsBotTurn && board.IsMain1 && ourAttack >= CurrentField.EnemySide.LifePoints;
-                return winsNow || OpponentHasLethal(board);
+                return winsNow || OpponentHasLethal(board) || SecondJudgmentReady(board);
             }
             return true;
         }
+
+        // A second Judgment Dragon in hand that can follow the first one this Main 1 (4+ names in the GY).
+        private bool SecondJudgmentReady(Board board) =>
+            IsBotTurn && board.IsMain1 && GraveNames() >= 4 && InHand(board.Hand, JudgmentDragon) &&
+            board.Hand.Count(card => card.IsCode(JudgmentDragon)) +
+            board.OwnMonsters.Count(card => card.IsCode(JudgmentDragon) && card.IsFaceup()) >= 2;
 
         // Card Trooper's mill: not at 15 cards or fewer (it milled at 5, 3 and 1 cards and we lost by deck-out), unless
         // our attackers already finish them.
@@ -356,14 +383,22 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return storm;
             }
 
-            // Celestia: tribute a Lightsworn, destroy up to 2 of their cards.
-            if (IsBotTurn && board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && CanMill(4, board) &&
+            // Celestia: tribute a Lightsworn, destroy up to 2 of their cards. Not into a Tytannial that can negate it
+            // (it tributed a Fluff Token and destroyed Celestia, 2026-10-24).
+            if (IsBotTurn && board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && CanMill(4, board) && !board.TargetingBlocked &&
                 board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))
             {
                 Log("Tribute summoning Celestia to destroy their cards");
                 _celestiaSummoning = true;
                 return celestia.NormalSummon();
+            }
+
+            // The wipe before another Judgment Dragon comes down: it would send the second one to the GY too.
+            if (JudgmentWipeWorthIt(board) && TryActivate(state, JudgmentDragon, board.StardustBlocking, out var wipe))
+            {
+                Log("Judgment Dragon's effect: they have 2+ cards more on the field");
+                return wipe;
             }
 
             if (judgmentReady)
@@ -382,12 +417,6 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     Log($"Special summoning Judgment Dragon ({GraveNames()} names): {(lastResort ? "only play against their lethal" : JudgmentReason(board))}");
                     return judgment.SpecialSummon();
                 }
-            }
-
-            if (JudgmentWipeWorthIt(board) && TryActivate(state, JudgmentDragon, board.StardustBlocking, out var wipe))
-            {
-                Log("Judgment Dragon's effect: they have 2+ cards more on the field");
-                return wipe;
             }
 
             var lumina = DecideLumina(state, board);
@@ -893,6 +922,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return true;
         }
 
+        // Javier: going to defense tells them we hold no Honest. When its DEF wouldn't hold anyway (only the LP
+        // difference is saved), a LIGHT attacker stays in attack while we're at 3000+ LP.
+        protected override bool KeepsAttackAsBluff(DynamicCard card, int strongestEnemyAttack) =>
+            (card.Attribute & LightAttribute) != 0 && card.Defense < strongestEnemyAttack && CurrentField.OwnSide.LifePoints >= 3000;
+
         // Honest in the Damage Step: when it turns the battle (we'd lose or bounce without it).
         private bool ShouldUseHonest(List<DynamicCard> enemySpells)
         {
@@ -1054,6 +1088,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Ryko, Celestia and Lyla break their backrow first (Javier: clear it before Judgment Dragon).
             if (_pendingEffect == 0 && !IsBotTurn && hint == DHint.DESTROY)
                 _pendingEffect = Ryko;
+            // Javier: against a Stardust that would negate it, Ryko skips the destruction and only mills.
+            if (_pendingEffect == Ryko && state.Minimum == 0 && (await BuildBoardAsync()).StardustBlocking)
+            {
+                Log("Ryko destroys nothing: Stardust would negate it, it only mills");
+                _pendingEffect = 0;
+                return new List<byte>();
+            }
             if (_pendingEffect is Ryko or Celestia or Lyla && hint is DHint.DESTROY or DHint.TARGET)
             {
                 int wanted = _pendingEffect == Celestia ? Math.Max(state.Minimum, Math.Min(2, state.Maximum)) : Math.Max(state.Minimum, 1);

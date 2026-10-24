@@ -39,11 +39,13 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya), ni contra Tytannial (niega el objetivo) ni con Plasma.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
-4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Con 2 cartas seteadas o más y una batalla que Lyla gana (o ataque directo), primero ataca y el efecto va en Main 2 (si una Prison se la lleva, igual gastó una backrow). Con una sola carta seteada, el efecto va primero.
+4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Cuándo Lyla ataca primero (si gana su batalla o pega directo) y el efecto va en Main 2:
+   - con 2 cartas seteadas o más, solo si la Mirror Force del rival ya apareció (en su cementerio o desterrada). Si la Prison se la lleva, igual gastó una backrow. Mientras no apareció, 2 cartas seteadas probablemente la esconden y el efecto va primero, antes de que tus atacantes entren en ella;
+   - con una sola carta seteada y el rival sin monstruos, pega directo primero.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
-6. **Celestia** tributando un Lightsworn, si el rival tiene cartas.
-7. **Judgment Dragon** (ver su ficha).
-8. **Efecto de JD.**
+6. **Celestia** tributando un Lightsworn, si el rival tiene cartas. No contra una Tytannial que pueda negarla (con algo para tributar).
+7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
+8. **Judgment Dragon** (ver su ficha).
 9. **Efecto de Lumina.**
 10. **Robo con Tragoedia.**
 11. **Efecto de Card Trooper.**
@@ -107,6 +109,7 @@ Código: `DecideNormalSummon`
 - su efecto limpia el campo del rival (2 cartas o más que vos, 2000 LP o más);
 - mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
 - **Main 1 solo si gana:** da lethal, o el efecto limpia y JD pega directo por la victoria. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
+- **Con dos JD:** el primero baja en Main 1 y limpia (si el rival tiene 2 cartas o más que vos y tenés más de 1000 LP), el segundo baja después y atacan los dos. Sin setear nada antes.
 - Sin motivo, espera. Con Plasma boca arriba no se invoca.
 
 **Stardust:** su efecto negaría el wipe, así que JD baja en Main 1 para atacar a Stardust (sin efecto); si pasa, el wipe va en Main 2.
@@ -121,9 +124,9 @@ Código: `DecideNormalSummon`
 **Su efecto (1000 LP, destruye todas las demás cartas), parecido a Black Rose:**
 - Se usa si el rival tiene 2 cartas o más que vos en el campo (sin contar a JD).
 - No con Stardust activo (lo negaría).
-- Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno o el rival tiene lethal.
+- Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
 
-Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SummonTrapPossible`
+Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapPossible`
 
 ### Gorz
 
@@ -214,6 +217,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 
 **Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
+- **Ryko contra Stardust:** no destruye nada (Stardust lo negaría) y solo muele. Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
 
 Código: `SelectDeckCardAsync`
 
@@ -260,7 +264,11 @@ Código: `DecideOwnEffectAsync`
 
 **Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP.
 
-Código: `ShouldUseHonest`, `DecideNormalSummon`
+**Farol:** un LIGHT boca arriba en ataque no pasa a defensa si su DEF tampoco aguantaría al atacante más fuerte del rival y tenés 3000 LP o más. Pasar a defensa le avisa al rival que no tenés Honest, y solo salva la diferencia de LP.
+
+**Corregido (2026-10-24):** Honest no salía nunca. Un bug hacía que el bot viera su propio monstruo como el del rival en las ventanas de batalla.
+
+Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
