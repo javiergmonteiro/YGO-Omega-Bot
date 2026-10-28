@@ -337,6 +337,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return use;
         }
 
+        // A stolen monster (Goyo's Fortress) plus one more of ours tribute Celestia, which breaks 2 of their cards.
+        protected override bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) =>
+            InHand(hand, Celestia) && ownMonsters.Count >= 1;
+
         // ---- Main Phase ---------------------------------------------------------------------------------
 
         protected override bool CanUseMonsterEffect(int cardId, Board board, List<DynamicCard> monsterTargets) => cardId switch

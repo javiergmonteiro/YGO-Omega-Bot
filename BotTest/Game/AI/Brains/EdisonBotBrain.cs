@@ -1244,8 +1244,23 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
-            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost);
+            bool fortressUse = attackers.Any(card => card.IsCode(GoyoGuardian)) && await StolenFortressHasUseAsync();
+            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost, fortressUse);
         }
+
+        // Javier: Goyo only takes a Machina Fortress (and only crashes into it) when we'd use it right away: a synchro
+        // with a tuner of ours, or a tribute for a monster in hand. Otherwise Goyo just trades for a Fortress they revive.
+        private async Task<bool> StolenFortressHasUseAsync()
+        {
+            const int fortressLevel = 7;
+            var own = (await GetBotMonsterCardsAsync()).Where(card => !card.IsCode(GoyoGuardian)).ToList();
+            bool synchro = own.Any(card => card.IsFaceup() && card.HasType((CardType)TunerType) && SynchroLevels.Contains(card.Level + fortressLevel) &&
+                (!card.IsCode(CannotBeSynchroMaterial) || card.IsDisabled()));
+            return synchro || CanTributeStolenMonster(await GetBotHandCardsAsync(), own);
+        }
+
+        /// <summary>Deck-specific: a monster in hand we'd tribute a stolen monster for (the others on our field also count).</summary>
+        protected virtual bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) => false;
 
         // Against Blackwings with cards in their hand: Kalut gives a battling Blackwing +1400, so an attack into a face-up
         // attack-position Blackwing that wins by less loses our monster instead (Javier: clear them 1-for-1 with effects).
@@ -1267,7 +1282,7 @@ namespace BotTest.Game.AI.Brains
         // Generic attack choice. Unlike the framework's base logic, negated monsters still count as monsters
         // (with Plasma on our side every opponent monster is negated, and the base logic then saw an empty field).
         private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers,
-            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost)
+            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost, bool fortressUse)
         {
             var ready = Enumerable.Range(0, attackers.Length).Where(i => !attackers[i].Attacked).ToList();
             BattleCmdResponse Done()
@@ -1307,10 +1322,10 @@ namespace BotTest.Game.AI.Brains
                 .SelectMany(i => enemyMonsters.Select(target => new { Index = i, Target = target, Score = GetAttackScore(attackers[i], target) }))
                 .Where(x => x.Score > 0)
                 // Destroying Machina Fortress in battle lets it destroy the attacker: not with a monster we need
-                // (2026-10-16: Dark Armed Dragon), unless it's a stolen one. Goyo does crash into it (Javier): its effect
-                // brings the Fortress to our field, so even if Goyo dies we come out ahead.
+                // (2026-10-16: Dark Armed Dragon), unless it's a stolen one. Goyo does crash into it when we'd use the
+                // Fortress it takes (Javier): then the trade is ours.
                 .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]) ||
-                    (attackers[x.Index].IsCode(GoyoGuardian) && !attackers[x.Index].IsDisabled()))
+                    (attackers[x.Index].IsCode(GoyoGuardian) && !attackers[x.Index].IsDisabled() && fortressUse))
                 .Where(x => !KalutTurnsIt(attackers[x.Index], x.Target))
                 .OrderByDescending(x => x.Score)
                 // Every attack-position target scores the same: hit the most dangerous one, not the leftmost
@@ -1500,11 +1515,13 @@ namespace BotTest.Game.AI.Brains
             if (card.IsCode(RoyalOppression))
                 return ShouldUseRoyalOppression(card, lifePoints, enemyMonsters, enemySpells);
 
-            // Goyo's steal: not on a monster that punishes being destroyed in battle (Machina Fortress).
+            // Goyo's steal: not on a monster that punishes being destroyed in battle (Machina Fortress), unless we'd
+            // tribute it or synchro with it right away (Javier).
             if (card.IsCode(StealsOnBattle))
             {
                 int lastInTheirGrave = (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).LastOrDefault();
-                if (lastInTheirGrave != 0 && PunishesBattleDestruction.Any(id => CardIdentity.Same(lastInTheirGrave, id)))
+                if (lastInTheirGrave != 0 && PunishesBattleDestruction.Any(id => CardIdentity.Same(lastInTheirGrave, id)) &&
+                    !await StolenFortressHasUseAsync())
                 {
                     Log($"Not stealing {lastInTheirGrave} with {card.ID}: it punishes being destroyed in battle");
                     return false;
