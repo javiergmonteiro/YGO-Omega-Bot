@@ -136,6 +136,17 @@ Código: `DecideNormalSummon`
 
 Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapPossible`
 
+### Contra Tytannial
+
+**Con una Tytannial boca arriba (niega todo lo que apunta tributando una Planta, ella misma incluida), el bot sigue este plan.** Si tiene lethal pasando por ella, lo ignora.
+- **Ryko:** se setea primero y se flipea aunque esté Tytannial: le hace gastar una Planta por vez (sola, se tributa ella). Apunta a Tytannial. Charge busca Ryko primero si no hay uno en mano.
+- **Judgment Dragon:** esperar los 4 nombres (los monstruos boca arriba muelen) y bajarlo, porque su wipe no apunta. El wipe se usa si ninguno de tus monstruos le gana a Tytannial en batalla.
+- **Con Plaguespreader:** un nivel 3 (Card Trooper, Lumina) hace Catastor (si Tytannial no es DARK); un nivel 4 hace Goyo, que choca con empate contra ella.
+- **Si no hay nada de eso:** un solo monstruo en el campo, sin extenderse (Lumina tampoco revive más cuerpos). Un LIGHT en ataque hace de farol de Honest y muele, o uno boca abajo hace de farol de Ryko.
+- Celestia nunca contra Tytannial boca arriba. Brionac contra ella solo en emergencia o con lethal (niega el rebote).
+
+Código: `TytannialPlan`, `DecideNormalSummon`, `ChargeSearchOrder`, `PlaguespreaderPlan`, `JudgmentReason`, `JudgmentWipeWorthIt`, `TradesOnTie`
+
 ### Gorz
 
 **Se invoca cuando no controlás cartas.**

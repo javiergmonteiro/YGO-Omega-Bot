@@ -781,6 +781,9 @@ namespace BotTest.Game.AI.Brains
                     var stealable = enemies.Where(card => card.GetRealPower() < 2800 && (card.Type & TokenType) == 0).ToList();
                     if (canAttackThisTurn && stealable.Count > 0)
                         score += 60 + stealable.Max(ThreatScore) / 100;
+                    // Javier: a 2800 Tytannial can't be stolen, but Goyo trades with her (her effect doesn't stop battle).
+                    else if (canAttackThisTurn && IsTytannialActive(faceUp.Where(card => card.IsAttack() && card.Attack <= 2800)))
+                        score += 50;
                     break;
 
                 case BlackwingArmedWing:
@@ -837,6 +840,9 @@ namespace BotTest.Game.AI.Brains
                     // make a Goyo that walks into it (2026-10-17: Goyo over Brionac into a set Mirror Force).
                     bool onlyBackrow = !hardThreat && board.EnemySpells.Any(card => !card.IsFaceup()) &&
                         faceUp.All(card => card.GetRealPower() < 1900);
+                    // Tytannial negates its bounce (Javier: Brionac into her only in an emergency or for lethal).
+                    if (IsTytannialActive(faceUp))
+                        break;
                     if (hardThreat && board.Hand.Any(card => HandValue(card) <= 2))
                         score += 45;
                     else if (onlyBackrow && canAttackThisTurn && board.Hand.Any(card => HandValue(card) <= 2))
@@ -1275,8 +1281,8 @@ namespace BotTest.Game.AI.Brains
                 ((avoidFortress && card.IsCode(PunishesMonsterTargeting)) || protectedZones.Contains(card.CurrentCoordinates.Sequence));
         }
 
-        /// <summary>Deck-specific: a monster we'd rather trade on equal ATK than keep (it does nothing on the field).</summary>
-        protected virtual bool TradesOnTie(DynamicCard card) => false;
+        /// <summary>Deck-specific: an attacker we'd rather trade on equal ATK with this target than keep.</summary>
+        protected virtual bool TradesOnTie(DynamicCard attacker, DynamicCard target) => false;
 
         /// <summary>Deck-specific: a monster in hand we'd tribute a stolen monster for (the others on our field also count).</summary>
         protected virtual bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) => false;
@@ -1324,11 +1330,12 @@ namespace BotTest.Game.AI.Brains
             // A stolen monster goes back at the End Phase: trading it is free, so ties count too (2026-10-16: a stolen
             // Stardust hit a token instead of trading with the Machina Fortress that then dealt lethal). Same for a
             // deck's throwaway body (Wulf), tokens included (Javier: Wulf trades with a Gorz token).
-            foreach (int i in ready.Where(i => IsStolen(attackers[i]) || TradesOnTie(attackers[i])))
+            foreach (int i in ready)
             {
                 bool stolen = IsStolen(attackers[i]);
                 var trade = enemyMonsters
-                    .Where(card => card.IsFaceup() && (!stolen || (card.Type & TokenType) == 0) && card.IsAttack() && card.Attack == attackers[i].Attack)
+                    .Where(card => card.IsFaceup() && card.IsAttack() && card.Attack == attackers[i].Attack)
+                    .Where(card => stolen ? (card.Type & TokenType) == 0 : TradesOnTie(attackers[i], card))
                     .OrderByDescending(ThreatScore)
                     .FirstOrDefault();
                 if (trade.ID > 0 && enemyMonsters.All(card => GetAttackScore(attackers[i], card) <= 0 || ThreatScore(card) < ThreatScore(trade)))

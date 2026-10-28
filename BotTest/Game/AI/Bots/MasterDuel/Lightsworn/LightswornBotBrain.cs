@@ -265,6 +265,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return null;
             if (OurLethal(board, 3000))
                 return "it gives lethal";
+            // Javier: against Tytannial, wait for the 4 names (face-up millers help) and JD's wipe, which she can't negate.
+            if (IsTytannialActive(board.EnemyMonsters) && CurrentField.OwnSide.LifePoints > 1000)
+                return "its wipe answers Tytannial (no targeting)";
             int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
             int ours = board.OwnMonsters.Count + board.OwnSpells.Count;
             bool wipe = theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking;
@@ -306,6 +309,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // it costs us (the 3000 DEF token walled two Judgment Dragons for two turns, 2026-10-27). Only when nothing
             // of ours beats them: against a 2100 token it wiped 4 of ours while JD and Wulf could handle it.
             int ourBest = board.OwnMonsters.Where(card => card.IsFaceup()).Select(card => card.Attack).DefaultIfEmpty(0).Max();
+            // Javier: the wipe doesn't target, so it's the clean answer to a Tytannial we can't beat in battle.
+            if (IsBotTurn && board.EnemyMonsters.Any(card => card.IsCode(CardKnowledge.TytannialPrincessOfCamellias) && card.IsFaceup() &&
+                    !card.IsDisabled() && card.GetRealPower() >= ourBest))
+                return true;
             if (IsBotTurn && !board.IsMain1 &&
                 board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken) && card.GetRealPower() >= ourBest))
                 return true;
@@ -342,7 +349,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         }
 
         // Wulf on the field is just a 2100 body: it trades on equal ATK (Javier: Wulf into the Gorz token, not JD's wipe).
-        protected override bool TradesOnTie(DynamicCard card) => card.IsCode(Wulf);
+        protected override bool TradesOnTie(DynamicCard attacker, DynamicCard target) =>
+            attacker.IsCode(Wulf) || (attacker.IsCode(GoyoGuardian) && target.IsCode(CardKnowledge.TytannialPrincessOfCamellias));
+
+        // Javier's plan against a face-up Tytannial (she negates every targeting effect by tributing a Plant, herself
+        // included): Ryko (set it, Charge for it) breaks her one Plant at a time; with Plaguespreader, Catastor (a level 3)
+        // or a Goyo trade; otherwise one monster only (a LIGHT in attack bluffs Honest and mills, or a face-down one
+        // bluffs Ryko). Lethal through her ignores all of this.
+        private bool TytannialPlan(Board board) =>
+            IsBotTurn && IsTytannialActive(board.EnemyMonsters) && !OurLethal(board);
 
         // A stolen monster (Goyo's Fortress) plus one more of ours tribute Celestia, which breaks 2 of their cards.
         protected override bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) =>
@@ -387,10 +402,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _lastDeckLog = deckLog;
 
             // Ryko set last turn: flip it first thing, breaking their backrow, before anything else (Javier).
-            // Not into Tytannial (it negates the targeting) or Plasma, and not when they have no card (it would hit ours).
+            // Not into Plasma, and not when they have no card (it would hit ours). Into Tytannial yes: she has to spend
+            // a Plant (herself when alone) to negate it, one by one (Javier).
             if (IsBotTurn && board.IsMain1 && TryGetReposable(state, Ryko, out var ryko) && !ryko.IsFaceup() && CanMill(3, board) &&
-                board.EnemyMonsters.Count + board.EnemySpells.Count > 0 &&
-                !IsTytannialActive(board.EnemyMonsters) && !PlasmaNegates(board))
+                board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && !PlasmaNegates(board))
             {
                 Log("Flip summoning Ryko");
                 return ryko.Reposition();
@@ -607,6 +622,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             if (!CanUseMonsterEffect(Lumina, board, board.EnemyMonsters))
                 return null;
+            // Against Tytannial, only to bring a level 3/4 for a Plaguespreader synchro (Catastor / Goyo).
+            if (TytannialPlan(board) && board.OwnMonsters.Count > 1)
+            {
+                LogOnChange("Lumina waits: Tytannial up, no more bodies on the field");
+                return null;
+            }
             if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
                 return null;
             _pendingEffect = Lumina;
@@ -671,6 +692,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int enemyBestPower = board.EnemyMonsters.Where(card => card.IsFaceup()).Select(card => card.GetRealPower()).DefaultIfEmpty(0).Max();
             bool honestInHand = InHand(hand, Honest);
             bool needBlocker = OpponentHasLethal(board) || (ownMonsters.Count == 0 && CurrentField.OwnSide.LifePoints <= 3000);
+
+            if (TytannialPlan(board))
+            {
+                if (!ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) && TryGetMonsterSettable(state, Ryko, out var rykoTyt))
+                {
+                    Log("Setting Ryko: against Tytannial it makes her spend a Plant");
+                    return rykoTyt.SetMonster();
+                }
+                if (ownMonsters.Count > 0)
+                {
+                    LogOnChange("Tytannial up and no Ryko: one monster on the field is enough, no more summons");
+                    return null;
+                }
+            }
 
             // Lyla first when she can break their backrow now (Javier: clear it as soon as possible).
             if (LylaCanBreak(board) && TryGetSummonable(state, Lyla, out var lylaNow))
@@ -1192,6 +1227,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     .Where(x => !avoided(x.Card) || IsKiller(x.Card))
                     .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
                     .OrderByDescending(x => IsKiller(x.Card))
+                    // Into a face-up Tytannial: she negates any target anyway, so aim at her (if she lets it through, she dies).
+                    .ThenByDescending(x => x.Card.IsCode(CardKnowledge.TytannialPrincessOfCamellias) && x.Card.IsFaceup())
                     .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())
                     .ThenByDescending(x => (x.Card.Type & CardKnowledge.TokenType) == 0)
                     .ThenByDescending(x => RemovalValue(x.Card))
@@ -1300,6 +1337,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private int[] ChargeSearchOrder(Board board)
         {
             var order = new List<int>();
+            if (TytannialPlan(board) && !InHand(board.Hand, Ryko))
+                order.Add(Ryko);
             if (OwnGrave.Any(id => new[] { Jain, Wulf, Garoth, Lyla, Ehren, Druid }.Any(t => CardIdentity.Same(id, t))))
                 order.Add(Lumina);
             if (HasBackrow(board))
@@ -1418,6 +1457,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Its cost puts a card from hand on top of the deck: only a cheap one.
             if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
                 return false;
+
+            // Against Tytannial (Javier): a level 3 (Card Trooper, Lumina) makes Catastor, a level 4 a Goyo that trades.
+            var tytannial = board.EnemyMonsters.FirstOrDefault(card => card.IsCode(CardKnowledge.TytannialPrincessOfCamellias) && card.IsFaceup());
+            bool tytannialPlan = TytannialPlan(board) && board.IsMain1;
+            bool catastorWorks = tytannial.ID != 0 && (tytannial.Attribute & CardKnowledge.DarkAttribute) == 0;
+            if (tytannialPlan && board.OwnMonsters.Any(card => card.IsFaceup() && !card.HasType((CardType)CardKnowledge.TunerType) &&
+                    ((card.Level == 3 && catastorWorks) || card.Level == 4)))
+            {
+                LogOnChange("Plaguespreader: synchro against Tytannial (Catastor with a level 3, Goyo trade with a level 4)");
+                return true;
+            }
 
             int ourAttack = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).Sum(card => card.Attack);
             foreach (var material in board.OwnMonsters.Where(card => card.IsFaceup() && !card.HasType((CardType)CardKnowledge.TunerType)))

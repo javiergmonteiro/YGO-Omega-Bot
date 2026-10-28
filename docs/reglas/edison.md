@@ -60,7 +60,8 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 - **Contra Cyber Valley boca arriba, nunca espera:** atacarla termina la Battle Phase, así que el synchro va primero.
 
 **Elige el synchro según el campo.** El orden del mazo solo desempata:
-- **Goyo:** si hay algo que le gane en batalla y valga robar (no tokens).
+- **Goyo:** si hay algo que le gane en batalla y valga robar (no tokens). Contra una Tytannial de 2800 o menos también: no la roba, pero choca con ella.
+- Brionac no suma contra una Tytannial boca arriba (niega el rebote).
 - **Armed Wing:** si hay monstruos en defensa que le gane con piercing.
 - **Armor Master:** contra un monstruo de 2800 o más que no podemos pasar.
 - **Silverwind:** con 2 o más monstruos boca arriba de DEF menor a 2800.
