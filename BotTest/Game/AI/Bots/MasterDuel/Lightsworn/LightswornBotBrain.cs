@@ -447,12 +447,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Celestia: tribute a Lightsworn, destroy up to 2 of their cards. Not into any face-up Tytannial: she negates
             // it even alone, tributing herself (2026-10-24 with a Fluff Token, 2026-10-27 alone). Needs a target worth
             // hitting: not a Fortress that costs us a discard, not a monster a Gearframe protects (Javier).
-            if (IsBotTurn && board.EnemyMonsters.Concat(board.EnemySpells).Any(card => !_avoidedTarget(card)) && CanMill(4, board) &&
-                !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters) && !board.StardustBlocking &&
+            // Javier: into an active Stardust (it negates the effect and destroys her), only as a body that keeps us ahead
+            // in monsters, without using her effect.
+            bool celestiaEffect = !board.StardustBlocking && board.EnemyMonsters.Concat(board.EnemySpells).Any(card => !_avoidedTarget(card)) &&
+                CanMill(4, board) && !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters);
+            bool celestiaBody = board.StardustBlocking && board.OwnMonsters.Count > board.EnemyMonsters.Count;
+            if (IsBotTurn && (celestiaEffect || celestiaBody) &&
                 board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))
             {
-                Log("Tribute summoning Celestia to destroy their cards");
+                Log(celestiaEffect ? "Tribute summoning Celestia to destroy their cards" : "Tribute summoning Celestia as a body (Stardust up: no effect)");
                 _celestiaSummoning = true;
                 return celestia.NormalSummon();
             }
@@ -934,11 +938,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (card.IsCode(Celestia))
             {
                 var board = await BuildBoardAsync();
-                bool use = CanMill(4, board);
+                bool use = CanMill(4, board) && !board.StardustBlocking;
                 if (use)
                     _pendingEffect = Celestia;
                 else
-                    Log($"Celestia's effect skipped: milling 4 would leave {DeckCount - 4} cards");
+                    Log(board.StardustBlocking ? "Celestia's effect skipped: Stardust would negate it" : $"Celestia's effect skipped: milling 4 would leave {DeckCount - 4} cards");
                 return use;
             }
 
