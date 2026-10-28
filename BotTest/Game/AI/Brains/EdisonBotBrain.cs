@@ -1307,8 +1307,10 @@ namespace BotTest.Game.AI.Brains
                 .SelectMany(i => enemyMonsters.Select(target => new { Index = i, Target = target, Score = GetAttackScore(attackers[i], target) }))
                 .Where(x => x.Score > 0)
                 // Destroying Machina Fortress in battle lets it destroy the attacker: not with a monster we need
-                // (2026-10-16: Dark Armed Dragon), unless it's a stolen one.
-                .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]))
+                // (2026-10-16: Dark Armed Dragon), unless it's a stolen one. Goyo does crash into it (Javier): its effect
+                // brings the Fortress to our field, so even if Goyo dies we come out ahead.
+                .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]) ||
+                    (attackers[x.Index].IsCode(GoyoGuardian) && !attackers[x.Index].IsDisabled()))
                 .Where(x => !KalutTurnsIt(attackers[x.Index], x.Target))
                 .OrderByDescending(x => x.Score)
                 // Every attack-position target scores the same: hit the most dangerous one, not the leftmost
