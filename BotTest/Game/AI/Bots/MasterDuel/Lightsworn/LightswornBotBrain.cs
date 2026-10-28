@@ -451,7 +451,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // in monsters, without using her effect.
             bool celestiaEffect = !board.StardustBlocking && board.EnemyMonsters.Concat(board.EnemySpells).Any(card => !_avoidedTarget(card)) &&
                 CanMill(4, board) && !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters);
-            bool celestiaBody = board.StardustBlocking && board.OwnMonsters.Count > board.EnemyMonsters.Count;
+            // Or to attack Stardust with Honest in hand (Celestia is LIGHT: 2300 + Stardust's 2500).
+            bool honestIntoStardust = board.IsMain1 && InHand(board.Hand, Honest) &&
+                board.EnemyMonsters.Any(card => card.IsCode(StardustDragon) && card.IsFaceup() && card.IsAttack());
+            bool celestiaBody = board.StardustBlocking && (board.OwnMonsters.Count > board.EnemyMonsters.Count || honestIntoStardust);
             if (IsBotTurn && (celestiaEffect || celestiaBody) &&
                 board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))

@@ -48,7 +48,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
    - **Una sola carta seteada:** si el rival no tiene monstruos, o solo tiene uno boca abajo, Lyla ataca primero para sacarle un Prison o Mirror Force. Si sobrevive, usa el efecto en Main 2.
    - **Lyla que quedó viva del turno anterior:** usa el efecto primero, antes de invocar otro monstruo (un Torrential se llevó a Lyla y Jain juntas). Lo de atacar primero es solo para una Lyla invocada ese turno.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
-6. **Celestia** tributando un Lightsworn, si el rival tiene una carta que valga romper (no un Fortress que cueste un descarte, ni un monstruo protegido por Gearframe). Nunca contra una Tytannial boca arriba: la niega aunque esté sola, tributándose a sí misma. Con Stardust activo solo baja como cuerpo si te deja con más monstruos que el rival, y nunca usa el efecto (Stardust lo niega y la destruye).
+6. **Celestia** tributando un Lightsworn, si el rival tiene una carta que valga romper (no un Fortress que cueste un descarte, ni un monstruo protegido por Gearframe). Nunca contra una Tytannial boca arriba: la niega aunque esté sola, tributándose a sí misma. Con Stardust activo solo baja como cuerpo si te deja con más monstruos que el rival, o en Main 1 con Honest en mano para atacar a Stardust en ataque, y nunca usa el efecto (Stardust lo niega y la destruye).
 7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
 8. **Judgment Dragon** (ver su ficha).
 9. **Efecto de Lumina.**
