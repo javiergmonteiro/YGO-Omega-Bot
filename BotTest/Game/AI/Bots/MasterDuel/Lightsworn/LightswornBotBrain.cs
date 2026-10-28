@@ -771,9 +771,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 order.Add(Ehren);
             order.AddRange(new[] { Jain, Garoth, CardTrooper, Lumina });
             // Druid stops our own GY targeting (Lumina, Monster Reincarnation, Pot of Avarice).
-            if (!hand.Any(card => card.IsCode(Lumina, MonsterReincarnation, PotOfAvarice)))
+            // Then it only goes last, when nothing else can: an empty board is worse (Javier: "no seteo nada ni para defenderse").
+            bool druidLast = hand.Any(card => card.IsCode(Lumina, MonsterReincarnation, PotOfAvarice));
+            if (!druidLast)
                 order.Add(Druid);
             order.AddRange(new[] { Lyla, Ehren });
+            if (druidLast)
+                order.Add(Druid);
 
             // With 15 cards or fewer, no more Lightsworn than needed: one already out is enough unless this one has a job.
             bool millerOut = ownMonsters.Any(card => card.IsFaceup() && card.IsCode(EndPhaseMillers));

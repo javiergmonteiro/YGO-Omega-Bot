@@ -91,7 +91,7 @@ Código: `GraveNames`
 4. Garoth
 5. Card Trooper
 6. Lumina
-7. Druid, salvo que tengas en mano Lumina, Monster Reincarnation o Pot of Avarice
+7. Druid, salvo que tengas en mano Lumina, Monster Reincarnation o Pot of Avarice: en ese caso va último, solo si no hay otro monstruo para jugar (mejor que dejar el campo vacío)
 8. Lyla y Ehren sin trabajo
 
 **Boca arriba o boca abajo:**
