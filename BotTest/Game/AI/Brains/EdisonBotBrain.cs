@@ -1258,8 +1258,11 @@ namespace BotTest.Game.AI.Brains
             bool fortressUse = attackers.Any(card => card.IsCode(GoyoGuardian)) && await StolenFortressHasUseAsync();
             // Javier: trading one of ours for their Fortress is fine while we keep more monsters than they do
             // (Gorz 2700 never hit a 2500 Fortress and the game was lost, 2026-10-27).
-            bool fieldAdvantage = (await GetBotMonsterCardsAsync()).Count > battleTargets.Count;
-            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost, fortressUse, fieldAdvantage);
+            var ourMonsters = await GetBotMonsterCardsAsync();
+            bool fieldAdvantage = ourMonsters.Count > battleTargets.Count;
+            // Javier: Fortress' effect only hits our other cards: with nothing else on our field, trading on a tie is fine.
+            bool onlyCard = ourMonsters.Count == 1 && (await GetOwnSpellCardsAsync()).Count == 0;
+            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost, fortressUse, fieldAdvantage, onlyCard);
         }
 
         // Javier: Goyo only takes a Machina Fortress (and only crashes into it) when we'd use it right away: a synchro
@@ -1318,7 +1321,7 @@ namespace BotTest.Game.AI.Brains
         // Generic attack choice. Unlike the framework's base logic, negated monsters still count as monsters
         // (with Plasma on our side every opponent monster is negated, and the base logic then saw an empty field).
         private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers,
-            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost, bool fortressUse, bool fieldAdvantage)
+            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost, bool fortressUse, bool fieldAdvantage, bool onlyCard)
         {
             var ready = Enumerable.Range(0, attackers.Length).Where(i => !attackers[i].Attacked).ToList();
             BattleCmdResponse Done()
@@ -1346,7 +1349,8 @@ namespace BotTest.Game.AI.Brains
                 bool stolen = IsStolen(attackers[i]);
                 var trade = enemyMonsters
                     .Where(card => card.IsFaceup() && card.IsAttack() && card.Attack == attackers[i].Attack)
-                    .Where(card => stolen ? (card.Type & TokenType) == 0 : TradesOnTie(attackers[i], card))
+                    .Where(card => stolen ? (card.Type & TokenType) == 0 : TradesOnTie(attackers[i], card) ||
+                        (onlyCard && card.IsCode(PunishesBattleDestruction)))
                     .OrderByDescending(ThreatScore)
                     .FirstOrDefault();
                 if (trade.ID > 0 && enemyMonsters.All(card => GetAttackScore(attackers[i], card) <= 0 || ThreatScore(card) < ThreatScore(trade)))

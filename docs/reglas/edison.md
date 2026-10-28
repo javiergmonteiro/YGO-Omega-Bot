@@ -550,7 +550,7 @@ Código: `IsStardustActive`, `IsStardustBlocking`, `ShouldUsePrison`
 - **Vale también para la selección propia de cada mazo** (Celestia, Ryko): ni Fortress que cueste un descarte, ni un monstruo con Union equipada al destruir.
 
 **Ataques contra Fortress:**
-- Un monstruo importante no lo ataca (se pierde por su efecto), salvo que sea robado o que tengas más monstruos que el rival: perder uno por el Fortress te deja igual con ventaja en el campo.
+- Un monstruo importante no lo ataca (se pierde por su efecto), salvo que sea robado o que tengas más monstruos que el rival: perder uno por el Fortress te deja igual con ventaja en el campo. Con empate choca solo si el atacante es tu única carta en el campo: el efecto del Fortress no tiene otra carta tuya que romper.
 - Armor Master no ataca si solo hay Fortress en su campo, y se invoca/queda en defensa; también se queda en defensa si no habrá batalla este turno (turno 1 o Main 2) y el rival tiene una Fortress boca arriba, para que no se la estrellen. Si no, queda en ataque (en defensa Ehren la devolvió al deck).
 - Goyo no roba una Fortress ni la ataca primero, salvo que la vaya a tributar o sincronizar ese turno (ver ataque general).
 - Los hechizos/trampas que apuntan (Prison, MST, Icarus) no lo penalizan: solo se evitan los efectos de monstruo.
