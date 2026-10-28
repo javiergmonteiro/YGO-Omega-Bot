@@ -251,6 +251,9 @@ namespace BotTest.Game.AI.Brains
         /// <summary>Activable cards the generic fallback must not activate (the deck decides when they're worth it).</summary>
         protected virtual int[] ExcludedFromGenericActivation => Array.Empty<int>();
 
+        /// <summary>Face-down monsters the generic fallback must not flip (their flip effect is the deck's call).</summary>
+        protected virtual int[] ExcludedFromGenericFlip => Array.Empty<int>();
+
         /// <summary>ATK we can add in battle from hand (e.g. Kalut), for "can we beat it" checks.</summary>
         protected virtual int BattleBoostInHand(List<DynamicCard> hand) => 0;
 
@@ -469,6 +472,7 @@ namespace BotTest.Game.AI.Brains
                 board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack()).Sum(card => card.Attack) >= CurrentField.EnemySide.LifePoints;
             filtered.ReposableCards = (state.ReposableCards ?? Array.Empty<DynamicCard>())
                 .Where(card => !(lethalReach && card.IsFaceup() && card.IsAttack()))
+                .Where(card => !(!card.IsFaceup() && card.IsCode(ExcludedFromGenericFlip)))
                 .Where(card => !(card.IsCode(FearlessAttackers) && !IsNegated(card) && card.IsAttack() && !onlyPunishers))
                 // A face-up defender doesn't switch to attack just to be exposed: if something of theirs beats it and it
                 // has no real monster to beat (tokens don't count), it stays in defense.

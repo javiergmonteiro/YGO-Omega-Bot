@@ -39,7 +39,7 @@ Código: `MaterialCost`
 
 Orden en que el bot decide en la Main Phase (la primera regla que se cumple, juega y vuelve a preguntar). Antes corren las aperturas generales (Trap Dustshoot, Heavy Storm cuando conviene, etc.). Después corren los efectos de monstruo y los sets de trampas. El resto del fallback genérico no invoca, no setea ni activa ninguna carta del mazo.
 
-1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya), ni contra Tytannial (niega el objetivo) ni con Plasma.
+1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya; tampoco lo da vuelta la lógica genérica), ni contra Tytannial (niega el objetivo) ni con Plasma.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
 4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Cuándo y cómo:
@@ -64,6 +64,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
 - Las magias de mill opcionales (Solar Recharge, Charge) solo si el deck queda por encima de 15, y no si ya tenés JD en mano con 4 nombres: en un turno bajaron el deck de 23 a 7 y JD nunca pudo bajar.
 
 **El bot cuenta las cartas que quedan en el deck (si llegás a 0, perdés).**
+- **Nunca un deck-out por la End Phase:** no baja un Lightsworn si el mill de la End Phase (los que ya tenés boca arriba, más él, más lo que reviva Lumina) se come el deck, salvo lethal. Lumina reviviendo a Ehren al lado de dos JD molió 14 con 8 cartas.
 - **15 o menos:** no baja otro Lightsworn que muela en la End Phase si ya hay uno moliendo, salvo que tenga un trabajo (Lyla con backrow rival, Ehren con monstruos boca abajo), haya lethal o haga falta un bloqueador. Card Trooper muele 1. Pot of Avarice se usa sí o sí.
 - **6 o menos (piso):** ningún mill opcional que lo deje en 6 o menos (Solar Recharge, Charge, Card Trooper, Celestia, flipear Ryko, JD), salvo lethal.
 
@@ -113,9 +114,9 @@ Código: `DecideNormalSummon`
 
 **Se invoca con los 4 nombres y un motivo:**
 - da lethal ese turno;
-- su efecto limpia el campo del rival (2 cartas o más que vos, 2000 LP o más);
+- su efecto limpia el campo del rival (el rival tiene más cartas que vos, sin contar Ryko ni Card Trooper; 2000 LP o más);
 - mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
-- **Main 1 solo si gana:** da lethal, o el efecto limpia y JD pega directo por la victoria. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
+- **Main 1 si gana o si limpia:** da lethal, o el efecto limpia el campo y después JD ataca. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
 - **Con dos JD:** el primero baja en Main 1 y limpia (si el rival tiene 2 cartas o más que vos y tenés más de 1000 LP), el segundo baja después y atacan los dos. Sin setear nada antes.
 - Sin motivo, espera. Con Plasma boca arriba no se invoca.
 
@@ -129,7 +130,7 @@ Código: `DecideNormalSummon`
 - su mill de la End Phase (4) lo dejaría en el piso de 6.
 
 **Su efecto (1000 LP, destruye todas las demás cartas), parecido a Black Rose:**
-- Se usa si el rival tiene 2 cartas o más que vos en el campo (sin contar a JD).
+- Se usa si el rival tiene más cartas que vos en el campo (sin contar a JD, ni a Ryko ni a Card Trooper, que no se pierden: Trooper encima roba). Primero el efecto, después desplegar.
 - No con Stardust activo (lo negaría).
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
 - **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token y ninguno de tus monstruos le gana, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos. Contra un token que JD o Wulf pueden sacar, no (barrió 4 propios por un token de 2100).
@@ -169,7 +170,7 @@ Código: `FindTragoediaSteal`
 
 ### Pot of Avarice
 
-**Se usa si después quedan 4 nombres en el cementerio y hay algo que valga la pena recuperar** (2 o más de: JD, Honest, Gorz, Tragoedia, Celestia, Lumina, Card Trooper). Sí o sí con 15 cartas o menos en el deck, con 2000 LP o menos, con los 2 JD en el cementerio, o si vas muy atrás (3500 LP o más de diferencia y 3 cartas o más de diferencia en el campo).
+**Se usa si después quedan 4 nombres en el cementerio y hay algo que valga la pena recuperar** (2 o más de: JD, Honest, Gorz, Tragoedia, Celestia, Lumina, Card Trooper). Sí o sí con 15 cartas o menos en el deck, con 2000 LP o menos, con los 2 JD en el cementerio, si vas muy atrás (3500 LP o más de diferencia y 3 cartas o más de diferencia en el campo), o si es tu única carta en la mano con el campo vacío.
 - Devuelve en este orden: las copias repetidas, los demás monstruos, JD, una copia de cada nombre y, por último, Necro Gardna y Plaguespreader.
 
 Código: `AvariceKeepsNames`, `AvaricePicks`
@@ -284,6 +285,7 @@ Código: `DecideOwnEffectAsync`
 - Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana, o si con Honest el daño da lethal.
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
 - No contra una Machina Fortress con Gearframe equipado (se destruye el Gearframe y no se gana nada).
+- No contra Catastor boca arriba: su efecto destruye a tu LIGHT al inicio del damage step igual.
 - Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal o que Ryko sea el tributo de Celestia (en mano) para el turno siguiente.
 - Una vez por batalla.
 
@@ -299,12 +301,13 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 **En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por turno (encadenó dos seguidas). Se setea una sola copia por vez.
 - **Si la van a destruir, se encadena igual:** siempre contra Heavy Storm; contra MST o Icarus (pueden apuntar a otra) solo si el rival tiene un monstruo en ataque.
+- **Cualquier jugada del rival en su Main 1** (por ejemplo el efecto de Hyunlei, que la rompió sin usar) con un monstruo suyo en ataque: se encadena, frena los ataques de ese turno igual.
 
 Código: `DecideOwnEffectAsync`
 
 ### Druid
 
-**No se invoca si tenés en mano Lumina, Monster Reincarnation o Pot of Avarice**, porque nadie puede elegir Lightsworn como objetivo, tampoco el bot.
+**Con Lumina, Monster Reincarnation o Pot of Avarice en mano va último**, solo si no hay otro monstruo para jugar, porque nadie puede elegir Lightsworn como objetivo, tampoco el bot. Mejor eso que dejar el campo vacío.
 
 Código: `DecideNormalSummon`
 

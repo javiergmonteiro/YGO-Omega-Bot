@@ -33,6 +33,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private const int DeckCaution = 15;
         private const int DeckFloor = 6;
 
+        // Roughly what each End Phase miller sends from the deck.
+        private static int MillAmount(int cardId) =>
+            CardIdentity.Same(cardId, JudgmentDragon) || CardIdentity.Same(cardId, Celestia) ? 4 :
+            CardIdentity.Same(cardId, Jain) || CardIdentity.Same(cardId, Druid) ? 2 :
+            EndPhaseMillers.Any(id => CardIdentity.Same(cardId, id)) ? 3 : 0;
+
+        private static int EndPhaseMill(Board board) =>
+            board.OwnMonsters.Where(card => card.IsFaceup() && !card.IsDisabled()).Sum(card => MillAmount(card.ID));
+
         private static readonly Random Rng = new();
 
         // Which of our effects the next selection belongs to (removal targets, Tragoedia's discard).
@@ -102,6 +111,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         protected override int[] ExcludedFromGenericSummon => DeckMonsters;
 
         protected override int[] ExcludedFromGenericSet => DeckMonsters;
+
+        // Ryko is flipped only by its own rule (they have cards to hit): into an empty field it destroys ours (Javier).
+        protected override int[] ExcludedFromGenericFlip { get; } = { Ryko };
 
         protected override int[] ExcludedFromGenericActivation { get; } =
         {
@@ -271,7 +283,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return "its wipe answers Tytannial (no targeting)";
             int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
             int ours = board.OwnMonsters.Count + board.OwnSpells.Count;
-            bool wipe = theirs - ours >= 2 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking;
+            bool wipe = WipeBehind(board) >= 1 && CurrentField.OwnSide.LifePoints >= 2000 && !board.StardustBlocking;
 
             // Stardust negates the wipe: JD comes down in Main 1 to attack it; if it passes, the wipe in Main 2 (Javier).
             bool stardustToHit = board.StardustBlocking &&
@@ -287,9 +299,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (board.IsMain1 && judgmentUp && board.EnemyMonsters.Count == 0)
                 return "joins the other Judgment Dragon's attack on an empty field";
 
-            // Main 1 only when wiping and then hitting directly wins; otherwise Main 2, after the battle showed their backrow.
+            // Main 1 when it wipes (Javier: "lo bajó en M2 no M1": the wipe first, then JD attacks on a clear field);
+            // otherwise Main 2, after the battle showed their backrow.
             if (board.IsMain1)
-                return wipe && 3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : null;
+                return wipe ? (3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : "its wipe clears their field, then it attacks") : null;
             if (wipe)
                 return "its wipe clears their field (Main 2)";
             if (CurrentHeader.CurrentTurn > 2 && !board.EnemySpells.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Count > 0)
@@ -297,11 +310,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return null;
         }
 
-        // Judgment Dragon's wipe: like Black Rose, when they have 2+ cards more than we do on the field.
+        // Cards they have more than we do, for Judgment Dragon's wipe. Ryko and Card Trooper don't count as ours: losing
+        // them costs nothing (Trooper even draws).
+        private static int WipeBehind(Board board) =>
+            board.EnemyMonsters.Count + board.EnemySpells.Count -
+            board.OwnMonsters.Count(card => !card.IsCode(JudgmentDragon) && !card.IsCode(Sacrificable)) - board.OwnSpells.Count;
+
+        // Judgment Dragon's wipe: when they have more cards than we do on the field (Javier: "hay que usarlo mas para
+        // eliminar amenazas, principalmente la backrow", first the wipe, then the deploy).
         private bool JudgmentWipeWorthIt(Board board)
         {
-            int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
-            int ours = board.OwnMonsters.Count(card => !card.IsCode(JudgmentDragon)) + board.OwnSpells.Count;
             int lifePoints = CurrentField.OwnSide.LifePoints;
             if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board))
                 return false;
@@ -317,7 +335,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (IsBotTurn && !board.IsMain1 &&
                 board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken) && card.GetRealPower() >= ourBest))
                 return true;
-            if (theirs - ours < 2)
+            if (WipeBehind(board) < 1)
                 return false;
 
             // Below 2000 LP only when it wins or keeps us alive.
@@ -469,7 +487,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             {
                 Log(board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken)) && !board.IsMain1
                     ? "Judgment Dragon's effect: Gorz / its token walls us, wipe in Main 2"
-                    : "Judgment Dragon's effect: they have 2+ cards more on the field");
+                    : "Judgment Dragon's effect: they have more cards on the field");
                 return wipe;
             }
 
@@ -541,10 +559,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (TryGetActivable(state, PotOfAvarice, out _))
             {
                 bool farBehind = FarBehind(board);
-                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2 || farBehind;
+                // Javier: "tenia pot of avarice y no lo uso siendo su unica carta en la mano?": our last card with an empty
+                // field goes no matter the names.
+                bool lastCard = hand.Count == 1 && board.OwnMonsters.Count + board.OwnSpells.Count == 0;
+                bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2 || farBehind || lastCard;
                 if ((forced || (AvariceKeepsNames() && AvariceWorthIt())) && TryActivate(state, PotOfAvarice, false, out var avarice))
                 {
-                    Log($"Pot of Avarice{(farBehind ? " (far behind: 3500+ LP and 3+ cards)" : forced ? " (deck low, LP low, or both Judgment Dragons in the GY)" : "")}");
+                    Log($"Pot of Avarice{(farBehind ? " (far behind: 3500+ LP and 3+ cards)" : lastCard ? " (our only card, empty field)" : forced ? " (deck low, LP low, or both Judgment Dragons in the GY)" : "")}");
                     _pendingEffect = PotOfAvarice;
                     return avarice;
                 }
@@ -798,6 +819,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     }
                     continue;
                 }
+                // Javier: Lumina reviving Ehren next to two Judgment Dragons milled 14 with 8 cards left.
+                int endMill = EndPhaseMill(board) + MillAmount(cardId) + (cardId == Lumina && hasJob ? 3 : 0);
+                if (mills && endMill >= DeckCount && !OurLethal(board, card.Attack))
+                {
+                    LogOnChange($"Holding {cardId}: the End Phase would mill {endMill} with {DeckCount} cards left");
+                    continue;
+                }
                 if (mills && DeckCount <= DeckFloor && !OurLethal(board, card.Attack) && !needBlocker)
                 {
                     LogOnChange($"Holding {cardId}: {DeckCount} cards left, its End Phase mill is too risky");
@@ -986,11 +1014,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool storm = theirChain && enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(CardKnowledge.HeavyStorm));
                 bool removal = theirChain && enemySpells.Any(spell => spell.IsFaceup() &&
                     spell.IsCode(CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack));
-                bool use = storm || (removal && threat) || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
+                // Javier: a monster effect (Hyunlei) destroyed it unused too. Any of their plays in their Main 1 with an
+                // attacker up: it stops this turn's attacks all the same.
+                bool mainPlay = theirChain && threat && phase == DuelPhase.Main1;
+                bool use = storm || (removal && threat) || mainPlay || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
                 if (use)
                 {
                     _roarTurn = CurrentHeader.CurrentTurn;
-                    Log($"Threatening Roar{(storm || removal ? " before it gets destroyed" : "")}");
+                    Log($"Threatening Roar{(storm || removal || mainPlay ? " before it gets destroyed" : "")}");
                 }
                 return use;
             }
@@ -1077,6 +1108,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             var theirs = enemySide.BattlingMonster;
             if ((ours.Attribute & LightAttribute) == 0 || theirs.Attack <= 0)
                 return false;
+
+            // Catastor destroys our LIGHT monster by its effect at the start of the Damage Step: Honest saves nothing (Javier).
+            if (theirs.IsFaceup() && !theirs.IsDisabled() && theirs.IsCode(CardKnowledge.DestroysNonDarkInBattle))
+            {
+                Log("Honest skipped: Catastor destroys ours by its effect anyway");
+                return false;
+            }
 
             // A Machina Fortress with Gearframe equipped: the union is destroyed instead, nothing gained (Javier).
             bool unionShield = theirs.IsCode(CardKnowledge.MachinaFortress) &&
