@@ -48,6 +48,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private HashSet<int> _setZonesSeen = new();
         private HashSet<string> _ownMonstersSeen = new();
         private int _trackTurn = -1;
+        private int _roarTurn = -1;
+        private int _lylaSeenTurn = -1;
+        private HashSet<int> _lylaFromLastTurn = new();
 
         public LightswornBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -73,6 +76,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _setZonesSeen = new();
             _ownMonstersSeen = new();
             _trackTurn = -1;
+            _roarTurn = -1;
+            _lylaSeenTurn = -1;
+            _lylaFromLastTurn = new();
         }
 
         protected override int[] SynchroPriority { get; } =
@@ -195,6 +201,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _trackTurn = CurrentHeader.CurrentTurn;
         }
 
+        // Lylas already on the field when our turn started (zones), read at our first Main Phase decision.
+        private void TrackLylaFromLastTurn(Board board)
+        {
+            if (!IsBotTurn || _lylaSeenTurn == CurrentHeader.CurrentTurn)
+                return;
+            _lylaSeenTurn = CurrentHeader.CurrentTurn;
+            _lylaFromLastTurn = board.OwnMonsters.Where(card => card.IsCode(Lyla) && card.IsFaceup())
+                .Select(card => (int)card.CurrentCoordinates.Sequence).ToHashSet();
+        }
+
         private static bool HasBackrow(Board board) =>
             board.EnemySpells.Any(card => !card.IsFaceup() || IsLastingCard(card));
 
@@ -212,10 +228,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Javier: with one lone set card, a face-up attack Lyla attacks first (directly into an empty field, or into
         // their only monster when it's face-down) to draw out a Prison / Mirror Force; if she survives, her effect in
         // Main 2. With 2+ set cards she never attacks first: her effect goes in Main 1.
+        // Only a Lyla summoned this turn: one that survived from last turn uses her effect first, before we summon
+        // anything else (a Torrential took her and Jain together, 2026-10-25).
         private bool LylaAttacksFirst(Board board)
         {
             if (!IsBotTurn || !board.IsMain1 ||
-                !board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked))
+                !board.OwnMonsters.Any(card => card.IsCode(Lyla) && card.IsFaceup() && card.IsAttack() && !card.Attacked &&
+                    !_lylaFromLastTurn.Contains(card.CurrentCoordinates.Sequence)))
                 return false;
             if (board.EnemySpells.Count(card => !card.IsFaceup()) != 1)
                 return false;
@@ -279,7 +298,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int theirs = board.EnemyMonsters.Count + board.EnemySpells.Count;
             int ours = board.OwnMonsters.Count(card => !card.IsCode(JudgmentDragon)) + board.OwnSpells.Count;
             int lifePoints = CurrentField.OwnSide.LifePoints;
-            if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board) || theirs - ours < 2)
+            if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board))
+                return false;
+
+            // Javier: Gorz answered our attack: in Main 2 the wipe goes (again) and clears Gorz and its token, whatever
+            // it costs us (the 3000 DEF token walled two Judgment Dragons for two turns, 2026-10-27).
+            if (IsBotTurn && !board.IsMain1 && board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken)))
+                return true;
+            if (theirs - ours < 2)
                 return false;
 
             // Below 2000 LP only when it wins or keeps us alive.
@@ -300,10 +326,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             board.OwnMonsters.Count(card => card.IsCode(JudgmentDragon) && card.IsFaceup()) >= 2;
 
         // Card Trooper's mill: not at 15 cards or fewer (it milled at 5, 3 and 1 cards and we lost by deck-out), unless
-        // our attackers already finish them.
+        // our attackers already finish them. Main 2 too: a Trooper stolen in battle (Goyo) only becomes ours there.
         private bool TrooperMills(Board board)
         {
-            if (!IsBotTurn || !board.IsMain1)
+            if (!IsBotTurn)
                 return false;
             bool use = (DeckCount > DeckCaution && CanMill(1, board)) || OurLethal(board);
             if (!use)
@@ -339,6 +365,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _celestiaSummoning = false;
 
             TrackUnansweredSummons(board);
+            TrackLylaFromLastTurn(board);
 
             string deckLog = $"Deck {DeckCount} cards, {GraveNames()} Lightsworn names in GY";
             if (deckLog != _lastDeckLog)
@@ -399,7 +426,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // The wipe before another Judgment Dragon comes down: it would send the second one to the GY too.
             if (JudgmentWipeWorthIt(board) && TryActivate(state, JudgmentDragon, board.StardustBlocking, out var wipe))
             {
-                Log("Judgment Dragon's effect: they have 2+ cards more on the field");
+                Log(board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken)) && !board.IsMain1
+                    ? "Judgment Dragon's effect: Gorz / its token came down, wipe again in Main 2"
+                    : "Judgment Dragon's effect: they have 2+ cards more on the field");
                 return wipe;
             }
 
@@ -878,11 +907,27 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             if (card.IsCode(ThreateningRoar))
             {
+                // One per turn: a second Roar stops nothing more (it chained two in a row, 2026-10-27).
+                if (IsBotTurn || _roarTurn == CurrentHeader.CurrentTurn)
+                    return false;
                 var phase = (DuelPhase)CurrentHeader.CurrentPhase;
                 bool battle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep;
                 var enemyMonsters = await GetEnemyMonsterCardsAsync();
                 bool threat = enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsAttack() && monster.Attack > 0);
-                return !IsBotTurn && battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader);
+                // Javier: if it's about to be destroyed, chain it anyway (it died to a Heavy Storm unused). Heavy Storm
+                // always takes it; an MST / Icarus may be aimed elsewhere, so only with an attacker to stop.
+                var enemySpells = await GetEnemySpellCardsAsync();
+                bool theirChain = CurrentHeader.LastChainPlayer == ChainTracker.Opponent;
+                bool storm = theirChain && enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(CardKnowledge.HeavyStorm));
+                bool removal = theirChain && enemySpells.Any(spell => spell.IsFaceup() &&
+                    spell.IsCode(CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack));
+                bool use = storm || (removal && threat) || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
+                if (use)
+                {
+                    _roarTurn = CurrentHeader.CurrentTurn;
+                    Log($"Threatening Roar{(storm || removal ? " before it gets destroyed" : "")}");
+                }
+                return use;
             }
 
             return null;
@@ -1054,7 +1099,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     if (sent != null)
                         return sent;
                 }
-                var order = _pendingEffect == SolarRecharge ? SolarDiscardOrder(hand) : DiscardOrder(hand);
+                var order = _pendingEffect == SolarRecharge ? SolarDiscardOrder(hand) : DiscardOrder(hand, board);
                 var discard = PickInOrder(state, order);
                 if (discard != null)
                 {
@@ -1119,11 +1164,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (_pendingEffect is Ryko or Celestia or Lyla && hint is DHint.DESTROY or DHint.TARGET)
             {
                 int wanted = _pendingEffect == Celestia ? Math.Max(state.Minimum, Math.Min(2, state.Maximum)) : Math.Max(state.Minimum, 1);
+                var killer = await AttackerThatKillsUsAsync();
                 var picks = selectable
                     .Select((card, index) => new { Card = card, Index = index })
                     .Where(x => x.Card.CurrentCoordinates.Controller == ChainTracker.Opponent)
                     .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
-                    .OrderByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())
+                    .OrderByDescending(x => killer.HasValue && x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                        x.Card.CurrentCoordinates.Sequence == killer.Value.CurrentCoordinates.Sequence)
+                    .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())
                     .ThenByDescending(x => (x.Card.Type & CardKnowledge.TokenType) == 0)
                     .ThenByDescending(x => RemovalValue(x.Card))
                     .Take(wanted)
@@ -1131,7 +1179,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     .ToList();
                 if (picks.Count >= Math.Max(state.Minimum, 1))
                 {
-                    Log($"{_pendingEffect} destroys {string.Join(",", picks.Select(i => selectable[i].ID))} (backrow first)");
+                    Log($"{_pendingEffect} destroys {string.Join(",", picks.Select(i => selectable[i].ID))} " +
+                        (killer.HasValue ? $"(the attacks left kill us: {killer.Value.ID} first)" : "(backrow first)"));
                     _pendingEffect = 0;
                     return picks;
                 }
@@ -1176,6 +1225,27 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return picks;
         }
 
+        // On their turn: the attackers still to come (not the one in battle now) kill us through our other monsters.
+        // Then the strongest of them is the target, not the backrow (Javier: Ryko broke a Raigeki Break and two
+        // Fortresses hit for 5000, 2026-10-27).
+        private async Task<DynamicCard?> AttackerThatKillsUsAsync()
+        {
+            if (IsBotTurn)
+                return null;
+            var enemySide = CurrentField.EnemySide;
+            var ownSide = CurrentField.OwnSide;
+            var attackers = (await GetEnemyMonsterCardsAsync())
+                .Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked &&
+                    !(enemySide.HasBattlingMonster && card.CurrentCoordinates.Sequence == enemySide.BattlingMonster.CurrentCoordinates.Sequence))
+                .OrderByDescending(card => card.Attack)
+                .ToList();
+            int blockers = (await GetBotMonsterCardsAsync())
+                .Count(card => !(ownSide.HasBattlingMonster && card.CurrentCoordinates.Sequence == ownSide.BattlingMonster.CurrentCoordinates.Sequence));
+            if (attackers.Count == 0 || attackers.Skip(blockers).Sum(card => card.Attack) < ownSide.LifePoints)
+                return null;
+            return attackers[0];
+        }
+
         // Solar Recharge: Wulf first, then the Lightsworn repeated in hand (one whose name isn't in the GY yet adds a name),
         // then the ones missing from the GY. Never Lumina unless it's the only one.
         private int[] SolarDiscardOrder(List<DynamicCard> hand)
@@ -1191,12 +1261,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 .ToArray();
         }
 
-        // Other discards (Lumina, Monster Reincarnation): Wulf, Plaguespreader, Gardna, then a Lightsworn the GY is missing
-        // or that's repeated, then the rest by hand value.
-        private int[] DiscardOrder(List<DynamicCard> hand)
+        // Other discards (Lumina, Monster Reincarnation): Wulf, Plaguespreader (only with a plan for it), Gardna, then a
+        // Lightsworn the GY is missing or that's repeated, then the rest by hand value.
+        private int[] DiscardOrder(List<DynamicCard> hand, Board board)
         {
             var lightsworn = LightswornMonsters.Where(id => id != Lumina && InHand(hand, id)).ToList();
-            return new[] { Wulf, Plaguespreader, NecroGardna }
+            var cheap = PlaguespreaderWorthDiscarding(board) ? new[] { Wulf, Plaguespreader, NecroGardna } : new[] { Wulf, NecroGardna };
+            return cheap
                 .Concat(lightsworn.Where(id => GraveCopies(id) == 0 && id != Ryko))
                 .Concat(lightsworn.Where(id => hand.Count(card => card.IsCode(id)) >= 2))
                 .Concat(hand.Where(card => !card.IsCode(JudgmentDragon, Lumina)).OrderBy(HandValue).Select(card => card.ID))
@@ -1238,12 +1309,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             GraveCopies(Wulf) + board.Hand.Count(card => card.IsCode(Wulf)) < 3;
 
         // Javier: Plaguespreader to the GY now, for a Goyo (level 6 = Plaguespreader + a level 4) next turn that steals
-        // their best monster. Needs a level 4 of ours and a cheap card for its top-of-deck cost.
-        private bool PlaguespreaderGoyoNextTurn(Board board) =>
-            IsBotTurn && GraveCopies(Plaguespreader) == 0 && !InHand(board.Hand, Plaguespreader) &&
-            ScoreSynchro(GoyoGuardian, board) > 30 &&
+        // their best monster. Needs a level 4 of ours and a cheap card for its top-of-deck cost, and that we live to
+        // next turn (at 800 LP against 3 attackers it was a brainless play, 2026-10-27).
+        private bool GoyoNextTurnSetup(Board board) =>
+            IsBotTurn && !OpponentHasLethal(board) && ScoreSynchro(GoyoGuardian, board) > 30 &&
             board.OwnMonsters.Concat(board.Hand).Any(card => card.IsCode(LightswornMonsters) && card.Level == 4) &&
-            board.Hand.Any(card => !card.IsCode(FoolishBurial) && Expendable(card));
+            board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card));
+
+        private bool PlaguespreaderGoyoNextTurn(Board board) =>
+            GraveCopies(Plaguespreader) == 0 && !InHand(board.Hand, Plaguespreader) && GoyoNextTurnSetup(board);
+
+        // Javier: Plaguespreader only goes to the GY (Foolish, a discard) with a plan to use it: a synchro this turn or
+        // a Goyo next turn.
+        private bool PlaguespreaderWorthDiscarding(Board board) =>
+            GraveCopies(Plaguespreader) == 0 && (PlaguespreaderPlan(board) || GoyoNextTurnSetup(board));
 
         private string? FoolishPlan(Board board)
         {
@@ -1275,8 +1354,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (PlaguespreaderGoyoNextTurn(board))
                 order.Add(Plaguespreader);
             order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
-            order.AddRange(new[] { Wulf, NecroGardna, Plaguespreader });
+            order.AddRange(new[] { Wulf, NecroGardna });
             order.AddRange(LightswornMonsters);
+            order.Add(Plaguespreader);
             return order.ToArray();
         }
 

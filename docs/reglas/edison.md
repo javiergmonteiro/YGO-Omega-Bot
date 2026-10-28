@@ -131,8 +131,9 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
     - **Si hay uno boca abajo en defensa:** le pega con el más fuerte.
     - **Si no,** termina la batalla.
     - Si el rival no tiene monstruos, ataca directo con el más fuerte.
+- **Jain (Lightsworn Paladin) cuenta con +300 al atacar a un monstruo** (su efecto en el damage step): 1800 contra 1800 gana.
 
-`Código: DecideBattleCmdCoreAsync, DecideGenericAttackAsync`
+`Código: DecideBattleCmdCoreAsync, DecideGenericAttackAsync, GetAttackScore`
 
 ## Cadenas: guardas generales
 

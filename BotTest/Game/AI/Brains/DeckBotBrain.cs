@@ -426,7 +426,8 @@ namespace BotTest.Game.AI.Brains
 
         protected static int GetAttackScore(DynamicCard attacker, DynamicCard defender)
         {
-            int attackerPower = attacker.Attack;
+            // Jain gains 300 in the Damage Step when it attacks a monster: 1800 into 1800 wins (Javier).
+            int attackerPower = attacker.Attack + (attacker.IsCode(Knowledge.CardKnowledge.LightswornPaladinJain) ? 300 : 0);
             int defenderPower = defender.GetRealPower();
 
             if (attackerPower <= defenderPower)

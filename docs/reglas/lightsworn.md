@@ -44,6 +44,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
    - **2 cartas seteadas o más, sin monstruo seteado del rival:** efecto con prioridad apenas se invoca. Lo obliga a usar sus trampas de invocación. No ataca primero.
    - **2 cartas seteadas o más y un monstruo seteado del rival:** sin prioridad. Deja pasar su ventana de invocación (Bottomless) y después activa el efecto en Main 1.
    - **Una sola carta seteada:** si el rival no tiene monstruos, o solo tiene uno boca abajo, Lyla ataca primero para sacarle un Prison o Mirror Force. Si sobrevive, usa el efecto en Main 2.
+   - **Lyla que quedó viva del turno anterior:** usa el efecto primero, antes de invocar otro monstruo (un Torrential se llevó a Lyla y Jain juntas). Lo de atacar primero es solo para una Lyla invocada ese turno.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
 6. **Celestia** tributando un Lightsworn, si el rival tiene cartas. No contra una Tytannial que pueda negarla (con algo para tributar).
 7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
@@ -129,6 +130,7 @@ Código: `DecideNormalSummon`
 - Se usa si el rival tiene 2 cartas o más que vos en el campo (sin contar a JD).
 - No con Stardust activo (lo negaría).
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
+- **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos.
 
 Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapPossible`
 
@@ -192,7 +194,8 @@ Código: `DecideSpells`
 1. Necro Gardna, si tenés Celestia en mano y un Lightsworn en el campo.
 2. Plaguespreader, si se cumple su plan de synchro (ver su ficha).
 3. Wulf, si tenés 2 Celestia en mano, el rival tiene 2 cartas o más y no hay un Lightsworn en tu campo: Wulf se invoca solo y es el tributo de Celestia, que rompe 2.
-4. Plaguespreader para un Goyo (nivel 6) el turno siguiente, si Goyo tiene un buen robo, tenés un Lightsworn nivel 4 y una carta barata para su costo.
+4. Plaguespreader para un Goyo (nivel 6) el turno siguiente, si Goyo tiene un buen robo, tenés un Lightsworn nivel 4, una carta barata para su costo, y el rival no tiene lethal en campo (si no llegás al turno siguiente, no hay plan).
+- Si no queda otra opción que mandar algo, Plaguespreader va último.
 5. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
 - Si no hay plan, no se usa.
 
@@ -213,7 +216,7 @@ Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 **Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip). Si hay objetivo, descarta lo que haga falta, menos Judgment Dragon (algo que usarías enseguida). Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
-- Qué descarta: Wulf, Plaguespreader, Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano, después lo que menos valga en la mano.
+- Qué descarta: Wulf, Plaguespreader (solo si tiene plan: synchro ese turno o Goyo el siguiente), Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano, después lo que menos valga en la mano.
 
 Código: `LuminaTarget`, `DiscardOrder`
 
@@ -222,8 +225,9 @@ Código: `LuminaTarget`, `DiscardOrder`
 **Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 - **Ryko contra Stardust:** no destruye nada (Stardust lo negaría) y solo muele. Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
+- **Si los ataques que le quedan al rival te matan** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
-Código: `SelectDeckCardAsync`
+Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`
 
 ### Necro Gardna
 
@@ -247,9 +251,9 @@ Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 
 ### Card Trooper
 
-**Muele 3 mientras sirva (queda algún Wulf en el deck o faltan nombres para JD); si no, 1.** Se activa en la Main 1 de tu turno, solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
+**Muele 3 mientras sirva (queda algún Wulf en el deck o faltan nombres para JD); si no, 1.** Se activa en la Main 1 de tu turno (o en la Main 2 si no se usó, por ejemplo un Trooper robado en batalla), solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
 
-Código: `OnAnnounceNumberAsync`
+Código: `OnAnnounceNumberAsync`, `TrooperMills`
 
 ### Mirror Force
 
@@ -277,7 +281,8 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
-**En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por cadena.
+**En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por turno (encadenó dos seguidas).
+- **Si la van a destruir, se encadena igual:** siempre contra Heavy Storm; contra MST o Icarus (pueden apuntar a otra) solo si el rival tiene un monstruo en ataque.
 
 Código: `DecideOwnEffectAsync`
 

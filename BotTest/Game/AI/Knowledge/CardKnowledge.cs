@@ -18,6 +18,8 @@ namespace BotTest.Game.AI.Knowledge
         public const int NecroGardna = 4906301;
         public const int DDCrow = 24508238;
         public const int DarkArmedDragon = 65192027;
+        // Gains 300 ATK in the Damage Step when it attacks a monster (attack math counts it).
+        public const int LightswornPaladinJain = 96235295;
         public const int BlackRoseDragon = 73580471;
         public const int BlackwingArmorMaster = 69031175;
 
