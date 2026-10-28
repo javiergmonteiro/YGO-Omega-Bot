@@ -139,7 +139,8 @@ Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `Summon
 ### Contra Tytannial
 
 **Con una Tytannial boca arriba (niega todo lo que apunta tributando una Planta, ella misma incluida), el bot sigue este plan.** Si tiene lethal pasando por ella, lo ignora.
-- **Ryko:** se setea primero y se flipea aunque esté Tytannial: le hace gastar una Planta por vez (sola, se tributa ella). Apunta a Tytannial. Charge busca Ryko primero si no hay uno en mano.
+- **Ryko:** se setea primero y se flipea aunque esté Tytannial. Sola, apunta a ella y Tytannial se tributa a sí misma. **Si tiene otras Plantas para tributar, Ryko solo muele** (no destruye nada). Charge busca Ryko primero si no hay uno en mano.
+- **Con Plantas para tributar, nada que apunte** (tampoco Lyla). Lo que sirve es la batalla: **Honest se guarda para ella**, nunca se descarta (Lumina tampoco lo descarta) ni se usa en otra batalla, salvo que esa batalla te mate. Catastor sube de prioridad.
 - **Judgment Dragon:** esperar los 4 nombres (los monstruos boca arriba muelen) y bajarlo, porque su wipe no apunta. El wipe se usa si ninguno de tus monstruos le gana a Tytannial en batalla.
 - **Con Plaguespreader:** un nivel 3 (Card Trooper, Lumina) hace Catastor (si Tytannial no es DARK); un nivel 4 hace Goyo, que choca con empate contra ella.
 - **Si no hay nada de eso:** un solo monstruo en el campo, sin extenderse (Lumina tampoco revive más cuerpos). Un LIGHT en ataque hace de farol de Honest y muele, o uno boca abajo hace de farol de Ryko.

@@ -224,7 +224,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             board.EnemyMonsters.Any(card => card.IsCode(CardKnowledge.DestinyHeroPlasma) && card.IsFaceup() && !card.IsDisabled());
 
         // Lyla's effect only when it can land: backrow to hit, no Stardust to negate it, no Plasma (Javier).
-        private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board);
+        // Nor into a Tytannial with Plants to tribute: she'd negate it for free (Javier: nothing that targets).
+        private bool LylaCanBreak(Board board) => HasBackrow(board) && !board.StardustBlocking && !PlasmaNegates(board) && !board.TargetingBlocked;
 
         // Javier: with one lone set card, a face-up attack Lyla attacks first (directly into an empty field, or into
         // their only monster when it's face-down) to draw out a Prison / Mirror Force; if she survives, her effect in
@@ -372,7 +373,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Lumina with something to revive discards whatever it takes, except what we'd use right away (Judgment
             // Dragon, Javier).
             Lumina => LuminaTarget(board.Graveyard, board) != 0 && !PlasmaNegates(board) &&
-                board.Hand.Any(card => !card.IsCode(Lumina, JudgmentDragon)),
+                board.Hand.Any(card => !card.IsCode(Lumina, JudgmentDragon) && !(board.TargetingBlocked && card.IsCode(Honest))),
             Tragoedia => FindTragoediaSteal(board).HasValue,
             CardTrooper => TrooperMills(board),
             // Back to the hand in Main Phase 2, after hitting (Javier: "se pega en Main 1 y en Main 2 se vuelve a la mano").
@@ -901,7 +902,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             if (card.IsCode(Honest) && location == CardLocation.Hand)
-                return ShouldUseHonest(await GetEnemySpellCardsAsync());
+                return ShouldUseHonest(await GetEnemySpellCardsAsync(), await GetEnemyMonsterCardsAsync());
 
             if (card.IsCode(Ryko))
             {
@@ -1045,7 +1046,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             (card.Attribute & LightAttribute) != 0 && card.Defense < strongestEnemyAttack && CurrentField.OwnSide.LifePoints >= 3000;
 
         // Honest in the Damage Step: when it turns the battle (we'd lose or bounce without it).
-        private bool ShouldUseHonest(List<DynamicCard> enemySpells)
+        private bool ShouldUseHonest(List<DynamicCard> enemySpells, List<DynamicCard> enemyMonsters)
         {
             var ownSide = CurrentField.OwnSide;
             var enemySide = CurrentField.EnemySide;
@@ -1072,6 +1073,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return false;
 
             int theirPower = theirs.GetRealPower();
+            // Javier: with a Tytannial that has Plants to tribute, Honest is kept for her (it targets nothing), unless
+            // this battle kills us.
+            bool savedForTytannial = IsTargetingBlocked(enemyMonsters) && !theirs.IsCode(CardKnowledge.TytannialPrincessOfCamellias) &&
+                !(!IsBotTurn && theirs.Attack - ours.GetRealPower() >= ownSide.LifePoints);
+            if (savedForTytannial)
+            {
+                Log("Honest kept for Tytannial");
+                return false;
+            }
             bool use;
             if (IsBotTurn)
             {
@@ -1205,10 +1215,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Ryko, Celestia and Lyla break their backrow first (Javier: clear it before Judgment Dragon).
             if (_pendingEffect == 0 && !IsBotTurn && hint == DHint.DESTROY)
                 _pendingEffect = Ryko;
-            // Javier: against a Stardust that would negate it, Ryko skips the destruction and only mills.
-            if (_pendingEffect == Ryko && state.Minimum == 0 && (await BuildBoardAsync()).StardustBlocking)
+            // Javier: against a Stardust that would negate it, or a Tytannial with Plants to tribute, Ryko skips the
+            // destruction and only mills.
+            var rykoBoard = _pendingEffect == Ryko && state.Minimum == 0 ? await BuildBoardAsync() : null;
+            if (rykoBoard != null && (rykoBoard.StardustBlocking || rykoBoard.TargetingBlocked))
             {
-                Log("Ryko destroys nothing: Stardust would negate it, it only mills");
+                Log($"Ryko destroys nothing: {(rykoBoard.StardustBlocking ? "Stardust" : "Tytannial with Plants to tribute")} would negate it, it only mills");
                 _pendingEffect = 0;
                 return new List<byte>();
             }
@@ -1328,7 +1340,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return cheap
                 .Concat(lightsworn.Where(id => GraveCopies(id) == 0 && id != Ryko))
                 .Concat(lightsworn.Where(id => hand.Count(card => card.IsCode(id)) >= 2))
-                .Concat(hand.Where(card => !card.IsCode(JudgmentDragon, Lumina)).OrderBy(HandValue).Select(card => card.ID))
+                // Honest is the answer to a Tytannial with Plants (battle, no targeting): never discarded then (Javier).
+                .Concat(hand.Where(card => !card.IsCode(JudgmentDragon, Lumina) && !(board.TargetingBlocked && card.IsCode(Honest)))
+                    .OrderBy(HandValue).Select(card => card.ID))
                 .ToArray();
         }
 

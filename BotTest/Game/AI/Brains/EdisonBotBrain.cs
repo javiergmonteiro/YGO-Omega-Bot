@@ -818,6 +818,10 @@ namespace BotTest.Game.AI.Brains
                     // Destroys a non-DARK monster it battles.
                     if (canAttackThisTurn && faceUp.Any(card => (card.Attribute & DarkAttribute) == 0 && card.GetRealPower() >= 2200))
                         score += 40;
+                    // Javier: it targets nothing, so it's the answer to a Tytannial with Plants to tribute.
+                    if (canAttackThisTurn && IsTargetingBlocked(faceUp) &&
+                        faceUp.Any(card => card.IsCode(NegatesFieldTargeting) && (card.Attribute & DarkAttribute) == 0))
+                        score += 30;
                     break;
 
                 case BlackRoseDragon:
