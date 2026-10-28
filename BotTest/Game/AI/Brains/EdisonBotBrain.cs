@@ -996,6 +996,7 @@ namespace BotTest.Game.AI.Brains
             // Best traps first: the ones that protect the backrow, then the strongest answers.
             var trap = setables
                 .Where(card => card.HasType(CardType.Trap))
+                .Where(card => !card.IsCode(OneSetCopyAtATime) || !board.OwnSpells.Any(set => !set.IsFaceup() && set.IsCode(card.ID)))
                 .OrderBy(card => Array.FindIndex(TrapSetOrder, id => card.IsCode(id)) is int i && i >= 0 ? i : TrapSetOrder.Length)
                 .FirstOrDefault();
             if (trap.ID > 0)
@@ -1255,7 +1256,10 @@ namespace BotTest.Game.AI.Brains
             }
 
             bool fortressUse = attackers.Any(card => card.IsCode(GoyoGuardian)) && await StolenFortressHasUseAsync();
-            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost, fortressUse);
+            // Javier: trading one of ours for their Fortress is fine while we keep more monsters than they do
+            // (Gorz 2700 never hit a 2500 Fortress and the game was lost, 2026-10-27).
+            bool fieldAdvantage = (await GetBotMonsterCardsAsync()).Count > battleTargets.Count;
+            return await DecideGenericAttackAsync(context, attackers, allAttackers, battleTargets, boost, fortressUse, fieldAdvantage);
         }
 
         // Javier: Goyo only takes a Machina Fortress (and only crashes into it) when we'd use it right away: a synchro
@@ -1285,6 +1289,9 @@ namespace BotTest.Game.AI.Brains
                 ((avoidFortress && card.IsCode(PunishesMonsterTargeting)) || protectedZones.Contains(card.CurrentCoordinates.Sequence));
         }
 
+        /// <summary>Deck-specific: traps set one copy at a time (two set copies, the wrong one got chained, Javier).</summary>
+        protected virtual int[] OneSetCopyAtATime => Array.Empty<int>();
+
         /// <summary>Deck-specific: an attacker we'd rather trade on equal ATK with this target than keep.</summary>
         protected virtual bool TradesOnTie(DynamicCard attacker, DynamicCard target) => false;
 
@@ -1311,7 +1318,7 @@ namespace BotTest.Game.AI.Brains
         // Generic attack choice. Unlike the framework's base logic, negated monsters still count as monsters
         // (with Plasma on our side every opponent monster is negated, and the base logic then saw an empty field).
         private Task<BattleCmdResponse> DecideGenericAttackAsync(DecisionContext<BattleCmdData> context, DynamicCard[] attackers,
-            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost, bool fortressUse)
+            DynamicCard[] allAttackers, List<DynamicCard> enemyMonsters, int boost, bool fortressUse, bool fieldAdvantage)
         {
             var ready = Enumerable.Range(0, attackers.Length).Where(i => !attackers[i].Attacked).ToList();
             BattleCmdResponse Done()
@@ -1357,6 +1364,7 @@ namespace BotTest.Game.AI.Brains
                 // (2026-10-16: Dark Armed Dragon), unless it's a stolen one. Goyo does crash into it when we'd use the
                 // Fortress it takes (Javier): then the trade is ours.
                 .Where(x => !x.Target.IsCode(PunishesBattleDestruction) || !IsImportantMonster(attackers[x.Index]) || IsStolen(attackers[x.Index]) ||
+                    (fieldAdvantage && !attackers[x.Index].IsCode(GoyoGuardian)) ||
                     (attackers[x.Index].IsCode(GoyoGuardian) && !attackers[x.Index].IsDisabled() && fortressUse))
                 .Where(x => !KalutTurnsIt(attackers[x.Index], x.Target))
                 .OrderByDescending(x => x.Score)

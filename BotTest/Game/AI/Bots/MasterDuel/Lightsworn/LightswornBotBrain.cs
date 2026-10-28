@@ -350,6 +350,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         }
 
         // Wulf on the field is just a 2100 body: it trades on equal ATK (Javier: Wulf into the Gorz token, not JD's wipe).
+        protected override int[] OneSetCopyAtATime => new[] { ThreateningRoar };
+
         protected override bool TradesOnTie(DynamicCard attacker, DynamicCard target) =>
             attacker.IsCode(Wulf) || (attacker.IsCode(GoyoGuardian) && target.IsCode(CardKnowledge.TytannialPrincessOfCamellias));
 
@@ -446,7 +448,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // it even alone, tributing herself (2026-10-24 with a Fluff Token, 2026-10-27 alone). Needs a target worth
             // hitting: not a Fortress that costs us a discard, not a monster a Gearframe protects (Javier).
             if (IsBotTurn && board.EnemyMonsters.Concat(board.EnemySpells).Any(card => !_avoidedTarget(card)) && CanMill(4, board) &&
-                !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters) &&
+                !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters) && !board.StardustBlocking &&
                 board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))
             {
@@ -996,6 +998,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 LogOnChange("Necro Gardna waits for an attack declaration");
                 return false;
             }
+            // In the damage step (Ryko flipped by the attack) it's too late: the battle still destroys it and Gardna is
+            // gone for nothing (2026-10-27).
+            if ((DuelPhase)CurrentHeader.CurrentPhase is DuelPhase.Damage or DuelPhase.DamageCal)
+            {
+                Log("Necro Gardna skipped: the battle is already in the damage step");
+                return false;
+            }
 
             int attack = enemySide.BattlingMonster.Attack;
             if (!ownSide.HasBattlingMonster)
@@ -1304,6 +1313,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return null;
             var enemySide = CurrentField.EnemySide;
             var ownSide = CurrentField.OwnSide;
+            // Javier: with Gorz in hand it stops the attacks left; hitting a Fortress would only cost us a card from
+            // hand, maybe Gorz itself (2026-10-27).
+            if ((ownSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Gorz)))
+                return null;
             var attackers = (await GetEnemyMonsterCardsAsync())
                 .Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked &&
                     !(enemySide.HasBattlingMonster && card.CurrentCoordinates.Sequence == enemySide.BattlingMonster.CurrentCoordinates.Sequence))

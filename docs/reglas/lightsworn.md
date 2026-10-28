@@ -48,7 +48,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
    - **Una sola carta seteada:** si el rival no tiene monstruos, o solo tiene uno boca abajo, Lyla ataca primero para sacarle un Prison o Mirror Force. Si sobrevive, usa el efecto en Main 2.
    - **Lyla que quedó viva del turno anterior:** usa el efecto primero, antes de invocar otro monstruo (un Torrential se llevó a Lyla y Jain juntas). Lo de atacar primero es solo para una Lyla invocada ese turno.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
-6. **Celestia** tributando un Lightsworn, si el rival tiene una carta que valga romper (no un Fortress que cueste un descarte, ni un monstruo protegido por Gearframe). Nunca contra una Tytannial boca arriba: la niega aunque esté sola, tributándose a sí misma.
+6. **Celestia** tributando un Lightsworn, si el rival tiene una carta que valga romper (no un Fortress que cueste un descarte, ni un monstruo protegido por Gearframe). Nunca contra una Tytannial boca arriba: la niega aunque esté sola, tributándose a sí misma. Nunca con Stardust activo (niega y la destruye).
 7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
 8. **Judgment Dragon** (ver su ficha).
 9. **Efecto de Lumina.**
@@ -241,13 +241,13 @@ Código: `LuminaTarget`, `DiscardOrder`
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 - **Ryko contra Stardust:** no destruye nada (Stardust lo negaría) y solo muele. Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
-- **Si los ataques que le quedan al rival te matan** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
+- **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
 Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffectTargetsAsync`
 
 ### Necro Gardna
 
-**Solo en la declaración de ataque del rival, para salvar un monstruo clave** que moriría en esa batalla:
+**Solo en la declaración de ataque del rival, para salvar un monstruo clave** que moriría en esa batalla. Nunca en el damage step (por ejemplo, cuando Ryko se da vuelta por el ataque): ahí ya no lo salva.
 - Lumina o Judgment Dragon;
 - un Lightsworn (Ryko incluido), si tenés Celestia en mano para tributarlo al turno siguiente;
 - un LIGHT en ataque que Honest también salvaría: va Gardna y Honest queda para una amenaza mayor.
@@ -297,7 +297,7 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
-**En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por turno (encadenó dos seguidas).
+**En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por turno (encadenó dos seguidas). Se setea una sola copia por vez.
 - **Si la van a destruir, se encadena igual:** siempre contra Heavy Storm; contra MST o Icarus (pueden apuntar a otra) solo si el rival tiene un monstruo en ataque.
 
 Código: `DecideOwnEffectAsync`
