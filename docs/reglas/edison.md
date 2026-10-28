@@ -124,7 +124,7 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
 7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:
-    - **Un monstruo robado choca aunque empate** con un monstruo del rival en ataque, porque igual se devuelve en la End Phase. Solo si no tiene un ataque mejor que gane.
+    - **Un monstruo robado choca aunque empate** con un monstruo del rival en ataque, porque igual se devuelve en la End Phase. Solo si no tiene un ataque mejor que gane. Lo mismo para el cuerpo descartable de cada mazo (Wulf en Lightsworn), que además puede chocar con tokens.
     - **El mejor ataque que gana.** Entre objetivos que gana igual, va al más peligroso. Un monstruo importante no ataca a Machina Fortress, salvo que sea robado, o sea **Goyo con un uso para el Fortress** (un tuner nuestro para sincronizarlo, o un monstruo en mano para tributarlo; en Lightsworn, Celestia): Goyo se lo queda y el trade es a favor.
     - **Si no gana solo pero sí con Kalut en la mano** (solo Blackwings): ataca igual al más peligroso que le gane con +1400 (nunca Fortress).
     - **Si no gana pero uno de atrás sí:** rebota contra un monstruo en defensa con DEF hasta 500 mayor a su ATK (y solo si le quedan más de 1000 de vida después), para que el siguiente pase a ser el primero.
@@ -546,6 +546,7 @@ Código: `IsStardustActive`, `IsStardustBlocking`, `ShouldUsePrison`
 - Mano vacía: siempre se puede apuntarlo.
 - Si se va a apuntar igual, antes se vacía la mano en el backrow (magias incluidas) para que el descarte cueste lo menos posible.
 - Si la última activación fue un efecto de monstruo, la selección no apunta a Fortress salvo que valga la pena.
+- **Vale también para la selección propia de cada mazo** (Celestia, Ryko): ni Fortress que cueste un descarte, ni un monstruo con Union equipada al destruir.
 
 **Ataques contra Fortress:**
 - Un monstruo importante no lo ataca (se pierde por su efecto), salvo que sea robado.
@@ -555,7 +556,7 @@ Código: `IsStardustActive`, `IsStardustBlocking`, `ShouldUsePrison`
 
 **Machina Gearframe (Union):** destruir el monstruo con la Union equipada destruye la Union; por eso Icarus y el ataque apuntan a la Union, no al monstruo.
 
-Código: `IsFortressTargetWorthItAsync`, `IsFortressTrap`, `WillTargetFortress`, `DecideGenericAttackAsync`
+Código: `IsFortressTargetWorthItAsync`, `IsFortressTrap`, `WillTargetFortress`, `DecideGenericAttackAsync`, `AvoidedMonsterEffectTargetsAsync`
 
 ### Tytannial, Princess of Camellias
 

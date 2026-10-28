@@ -1259,6 +1259,25 @@ namespace BotTest.Game.AI.Brains
             return synchro || CanTributeStolenMonster(await GetBotHandCardsAsync(), own);
         }
 
+        /// <summary>
+        /// Javier (same as Icarus, for every deck): our monster-effect removal skips a Machina Fortress unless it's worth
+        /// its discard, and when destroying, a monster with a union equipped (only the union would die: hit the union).
+        /// </summary>
+        protected async Task<Func<DynamicCard, bool>> AvoidedMonsterEffectTargetsAsync(bool destroying)
+        {
+            var enemySpells = await GetEnemySpellCardsAsync();
+            var enemyMonsters = await GetEnemyMonsterCardsAsync();
+            bool avoidFortress = !await IsFortressTargetWorthItAsync(await GetBotHandCardsAsync());
+            var protectedZones = destroying
+                ? enemyMonsters.Where(card => IsProtectedByUnion(card, enemySpells)).Select(card => (int)card.CurrentCoordinates.Sequence).ToHashSet()
+                : new HashSet<int>();
+            return card => card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                ((avoidFortress && card.IsCode(PunishesMonsterTargeting)) || protectedZones.Contains(card.CurrentCoordinates.Sequence));
+        }
+
+        /// <summary>Deck-specific: a monster we'd rather trade on equal ATK than keep (it does nothing on the field).</summary>
+        protected virtual bool TradesOnTie(DynamicCard card) => false;
+
         /// <summary>Deck-specific: a monster in hand we'd tribute a stolen monster for (the others on our field also count).</summary>
         protected virtual bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) => false;
 
@@ -1303,16 +1322,18 @@ namespace BotTest.Game.AI.Brains
             }
 
             // A stolen monster goes back at the End Phase: trading it is free, so ties count too (2026-10-16: a stolen
-            // Stardust hit a token instead of trading with the Machina Fortress that then dealt lethal).
-            foreach (int i in ready.Where(i => IsStolen(attackers[i])))
+            // Stardust hit a token instead of trading with the Machina Fortress that then dealt lethal). Same for a
+            // deck's throwaway body (Wulf), tokens included (Javier: Wulf trades with a Gorz token).
+            foreach (int i in ready.Where(i => IsStolen(attackers[i]) || TradesOnTie(attackers[i])))
             {
+                bool stolen = IsStolen(attackers[i]);
                 var trade = enemyMonsters
-                    .Where(card => card.IsFaceup() && (card.Type & TokenType) == 0 && card.IsAttack() && card.Attack == attackers[i].Attack)
+                    .Where(card => card.IsFaceup() && (!stolen || (card.Type & TokenType) == 0) && card.IsAttack() && card.Attack == attackers[i].Attack)
                     .OrderByDescending(ThreatScore)
                     .FirstOrDefault();
                 if (trade.ID > 0 && enemyMonsters.All(card => GetAttackScore(attackers[i], card) <= 0 || ThreatScore(card) < ThreatScore(trade)))
                 {
-                    Log($"Stolen {attackers[i].ID} trades with {trade.ID}");
+                    Log($"{(stolen ? "Stolen " : "")}{attackers[i].ID} trades with {trade.ID}");
                     _forcedAttackTarget = trade;
                     return Task.FromResult(AttackWith(attackers[i]));
                 }

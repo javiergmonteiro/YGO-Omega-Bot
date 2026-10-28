@@ -49,6 +49,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private HashSet<string> _ownMonstersSeen = new();
         private int _trackTurn = -1;
         private int _roarTurn = -1;
+        private Func<DynamicCard, bool> _avoidedTarget = _ => false;
         private int _lylaSeenTurn = -1;
         private HashSet<int> _lylaFromLastTurn = new();
 
@@ -302,8 +303,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return false;
 
             // Javier: Gorz answered our attack: in Main 2 the wipe goes (again) and clears Gorz and its token, whatever
-            // it costs us (the 3000 DEF token walled two Judgment Dragons for two turns, 2026-10-27).
-            if (IsBotTurn && !board.IsMain1 && board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken)))
+            // it costs us (the 3000 DEF token walled two Judgment Dragons for two turns, 2026-10-27). Only when nothing
+            // of ours beats them: against a 2100 token it wiped 4 of ours while JD and Wulf could handle it.
+            int ourBest = board.OwnMonsters.Where(card => card.IsFaceup()).Select(card => card.Attack).DefaultIfEmpty(0).Max();
+            if (IsBotTurn && !board.IsMain1 &&
+                board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken) && card.GetRealPower() >= ourBest))
                 return true;
             if (theirs - ours < 2)
                 return false;
@@ -337,6 +341,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return use;
         }
 
+        // Wulf on the field is just a 2100 body: it trades on equal ATK (Javier: Wulf into the Gorz token, not JD's wipe).
+        protected override bool TradesOnTie(DynamicCard card) => card.IsCode(Wulf);
+
         // A stolen monster (Goyo's Fortress) plus one more of ours tribute Celestia, which breaks 2 of their cards.
         protected override bool CanTributeStolenMonster(List<DynamicCard> hand, List<DynamicCard> ownMonsters) =>
             InHand(hand, Celestia) && ownMonsters.Count >= 1;
@@ -359,8 +366,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _ => true
         };
 
-        protected override Task<IdleCmdResponse?> DecideMainPhaseAsync(DecisionContext<IdleCmdData> context, Board board) =>
-            Task.FromResult(DecideMainPhase(context, board));
+        protected override async Task<IdleCmdResponse?> DecideMainPhaseAsync(DecisionContext<IdleCmdData> context, Board board)
+        {
+            _avoidedTarget = await AvoidedMonsterEffectTargetsAsync(destroying: true);
+            return DecideMainPhase(context, board);
+        }
 
         private IdleCmdResponse? DecideMainPhase(DecisionContext<IdleCmdData> context, Board board)
         {
@@ -416,9 +426,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return storm;
             }
 
-            // Celestia: tribute a Lightsworn, destroy up to 2 of their cards. Not into a Tytannial that can negate it
-            // (it tributed a Fluff Token and destroyed Celestia, 2026-10-24).
-            if (IsBotTurn && board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && CanMill(4, board) && !board.TargetingBlocked &&
+            // Celestia: tribute a Lightsworn, destroy up to 2 of their cards. Not into any face-up Tytannial: she negates
+            // it even alone, tributing herself (2026-10-24 with a Fluff Token, 2026-10-27 alone). Needs a target worth
+            // hitting: not a Fortress that costs us a discard, not a monster a Gearframe protects (Javier).
+            if (IsBotTurn && board.EnemyMonsters.Concat(board.EnemySpells).Any(card => !_avoidedTarget(card)) && CanMill(4, board) &&
+                !board.TargetingBlocked && !IsTytannialActive(board.EnemyMonsters) &&
                 board.OwnMonsters.Any(card => card.IsCode(LightswornMonsters)) &&
                 TryGetSummonable(state, Celestia, out var celestia))
             {
@@ -431,7 +443,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (JudgmentWipeWorthIt(board) && TryActivate(state, JudgmentDragon, board.StardustBlocking, out var wipe))
             {
                 Log(board.EnemyMonsters.Any(card => card.IsCode(Gorz, GorzToken)) && !board.IsMain1
-                    ? "Judgment Dragon's effect: Gorz / its token came down, wipe again in Main 2"
+                    ? "Judgment Dragon's effect: Gorz / its token walls us, wipe in Main 2"
                     : "Judgment Dragon's effect: they have 2+ cards more on the field");
                 return wipe;
             }
@@ -982,7 +994,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 .ToList();
             bool biggerComing = lastHit > 0 && waiting.Any(card => card.Attack > lastHit);
             bool restKills = waiting.Sum(card => card.Attack) >= CurrentField.OwnSide.LifePoints;
-            bool phaseOk = (DuelPhase)CurrentHeader.CurrentPhase is DuelPhase.BattleStep or DuelPhase.Damage or DuelPhase.DamageCal or DuelPhase.Battle;
+            bool phaseOk = (DuelPhase)CurrentHeader.CurrentPhase is DuelPhase.BattleStart or DuelPhase.BattleStep or DuelPhase.Damage or DuelPhase.DamageCal or DuelPhase.Battle;
             if (phaseOk && biggerComing && !restKills)
             {
                 Log($"Gorz waits: a bigger attacker ({waiting.Max(card => card.Attack)}) is still to come after {lastHit}");
@@ -1169,12 +1181,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             {
                 int wanted = _pendingEffect == Celestia ? Math.Max(state.Minimum, Math.Min(2, state.Maximum)) : Math.Max(state.Minimum, 1);
                 var killer = await AttackerThatKillsUsAsync();
+                bool IsKiller(DynamicCard card) => killer.HasValue && card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                    card.CurrentCoordinates.Sequence == killer.Value.CurrentCoordinates.Sequence;
+                var avoided = await AvoidedMonsterEffectTargetsAsync(hint == DHint.DESTROY);
                 var picks = selectable
                     .Select((card, index) => new { Card = card, Index = index })
                     .Where(x => x.Card.CurrentCoordinates.Controller == ChainTracker.Opponent)
+                    // Like Icarus: no Fortress that costs a discard, no Gearframe-protected monster. The attacker
+                    // that would kill us is still fair game.
+                    .Where(x => !avoided(x.Card) || IsKiller(x.Card))
                     .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
-                    .OrderByDescending(x => killer.HasValue && x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
-                        x.Card.CurrentCoordinates.Sequence == killer.Value.CurrentCoordinates.Sequence)
+                    .OrderByDescending(x => IsKiller(x.Card))
                     .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())
                     .ThenByDescending(x => (x.Card.Type & CardKnowledge.TokenType) == 0)
                     .ThenByDescending(x => RemovalValue(x.Card))
@@ -1386,8 +1403,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // lethal. Only when no set card of theirs may be Bottomless / Torrential (Javier).
         private bool PlaguespreaderPlan(Board board)
         {
-            if (!IsBotTurn || SummonTrapPossible(board) || OppressionStopsOurSpecialSummons(board))
+            // Javier: with the deck running low, a Lightsworn that mills every End Phase (Jain) goes into any synchro to
+            // get it off the field, Bottomless or not, and any card can go on top of the deck (the bot sat idle and
+            // decked out with Plaguespreader in the GY and Jain milling, 2026-10-27).
+            bool millerOut = DeckCount <= DeckCaution && board.OwnMonsters.Any(card => card.IsFaceup() && card.IsCode(EndPhaseMillers) &&
+                Synchros.Any(x => x.Value.Level == card.Level + 2));
+            if (!IsBotTurn || (SummonTrapPossible(board) && !millerOut) || OppressionStopsOurSpecialSummons(board))
                 return false;
+            if (millerOut && board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader, JudgmentDragon)))
+            {
+                LogOnChange($"Plaguespreader: synchro to take an End Phase miller off the field ({DeckCount} cards left)");
+                return true;
+            }
             // Its cost puts a card from hand on top of the deck: only a cheap one.
             if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
                 return false;

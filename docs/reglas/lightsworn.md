@@ -22,7 +22,9 @@ Código: `HandValue`
 - Un LIGHT que con Honest le gana al más fuerte del rival se queda en ataque.
 - ⚠ Contra un monstruo en defensa con poco ATK, Honest suma poco: el bot puede atacar de más.
 
-Código: `BattleBoostInHand`, `CanBeBoosted`
+- **Wulf choca con empate** (también contra tokens): en el campo es solo un cuerpo de 2100.
+
+Código: `BattleBoostInHand`, `CanBeBoosted`, `TradesOnTie`
 
 ### Material para tributo
 
@@ -46,7 +48,7 @@ Orden en que el bot decide en la Main Phase (la primera regla que se cumple, jue
    - **Una sola carta seteada:** si el rival no tiene monstruos, o solo tiene uno boca abajo, Lyla ataca primero para sacarle un Prison o Mirror Force. Si sobrevive, usa el efecto en Main 2.
    - **Lyla que quedó viva del turno anterior:** usa el efecto primero, antes de invocar otro monstruo (un Torrential se llevó a Lyla y Jain juntas). Lo de atacar primero es solo para una Lyla invocada ese turno.
 5. **Heavy Storm** si JD está listo y una carta seteada del rival puede ser Bottomless o Torrential.
-6. **Celestia** tributando un Lightsworn, si el rival tiene cartas. No contra una Tytannial que pueda negarla (con algo para tributar).
+6. **Celestia** tributando un Lightsworn, si el rival tiene una carta que valga romper (no un Fortress que cueste un descarte, ni un monstruo protegido por Gearframe). Nunca contra una Tytannial boca arriba: la niega aunque esté sola, tributándose a sí misma.
 7. **Efecto de JD**, antes de invocar otro JD (si no, el wipe lo mandaría al cementerio).
 8. **Judgment Dragon** (ver su ficha).
 9. **Efecto de Lumina.**
@@ -130,7 +132,7 @@ Código: `DecideNormalSummon`
 - Se usa si el rival tiene 2 cartas o más que vos en el campo (sin contar a JD).
 - No con Stardust activo (lo negaría).
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
-- **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos.
+- **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token y ninguno de tus monstruos le gana, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos. Contra un token que JD o Wulf pueden sacar, no (barrió 4 propios por un token de 2100).
 
 Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapPossible`
 
@@ -138,7 +140,7 @@ Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `Summon
 
 **Se invoca cuando no controlás cartas.**
 - Siempre en defensa, y su token también.
-- Espera al último ataque (el token sale más grande): si todavía falta atacar un monstruo con más ATK que el golpe recibido, no lo baja.
+- Espera al último ataque (el token sale más grande): si todavía falta atacar un monstruo con más ATK que el golpe recibido, no lo baja. También al inicio de la batalla (antes salía ahí sin esperar).
 - Si el golpe ya fue el más fuerte, o lo que falta atacar te mata, lo baja enseguida.
 
 Código: `ShouldSummonGorzAsync`, `OnSelectPositionAsync`
@@ -207,6 +209,7 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
 - El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.
 - Brionac como jugada de valor solo si tenés 2 cartas baratas en mano (una va arriba del deck y la otra paga su efecto); si no, solo si da lethal.
+- **Con el deck en 15 o menos y un Lightsworn que muele en la End Phase en campo (Jain):** sincro con él para sacarlo del campo, aunque haya riesgo de Bottomless y con cualquier carta arriba del deck (menos JD). Se quedó quieto con Plaguespreader en el cementerio y perdió por deck-out.
 - Para revivirlo pone una carta de la mano arriba del deck, y tiene que ser barata: Wulf, Necro Gardna, Plaguespreader o un Lightsworn cuyo nombre ya está en el cementerio (no Lumina). Si no hay, no se hace (economía de cartas).
 
 Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
@@ -225,9 +228,10 @@ Código: `LuminaTarget`, `DiscardOrder`
 **Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 - **Ryko contra Stardust:** no destruye nada (Stardust lo negaría) y solo muele. Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
+- **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
 - **Si los ataques que le quedan al rival te matan** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
-Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`
+Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffectTargetsAsync`
 
 ### Necro Gardna
 
