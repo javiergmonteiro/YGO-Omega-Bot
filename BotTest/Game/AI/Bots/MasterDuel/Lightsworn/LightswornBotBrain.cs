@@ -61,6 +61,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private Func<DynamicCard, bool> _avoidedTarget = _ => false;
         private int _lylaSeenTurn = -1;
         private HashSet<int> _lylaFromLastTurn = new();
+        private int _gorzBaitTurn = -1;
+        private (int Turn, int Sequence, int LifePoints)? _gardnaAttack;
 
         public LightswornBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -89,6 +91,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _roarTurn = -1;
             _lylaSeenTurn = -1;
             _lylaFromLastTurn = new();
+            _gorzBaitTurn = -1;
+            _gardnaAttack = null;
         }
 
         protected override int[] SynchroPriority { get; } =
@@ -190,6 +194,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private bool SummonTrapPossible(Board board) =>
             board.EnemySpells.Any(card => !card.IsFaceup() && !_passedSummon.Contains(card.CurrentCoordinates.Sequence)) &&
             OpponentMayStillHave(board, SummonPunishers);
+
+        // Judgment Dragon only waits for a Bottomless / Torrential we saw in their hand (Dustshoot) that hasn't shown up
+        // yet. Unseen, it takes the chance: waiting costs it momentum and tempo (Javier).
+        private bool SummonTrapKnown(Board board) =>
+            SummonTrapPossible(board) && SummonPunishers.Any(StillInRevealedHand);
 
         // Javier: "baje y no uso bottomless asi que baja la probabilidad de que lo tenga". When one of our monsters with
         // 1500+ ATK appears and their set cards stay the same, those set cards let it through: probably not Bottomless.
@@ -437,11 +446,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (spell.HasValue)
                 return spell;
 
-            // Gorz in hand and nothing strong to play: keep the field empty so it can land (Javier).
+            // Gorz in hand and nothing strong to play: keep the field empty so it can land (Javier). One turn only: a
+            // second empty turn gives it away and they stop attacking (2026-10-28, two turns passed with 6 cards).
             bool gorzBait = InHand(hand, Gorz) && board.OwnMonsters.Count == 0 && board.OwnSpells.Count == 0 &&
-                board.EnemyMonsters.Count > 0 && !hand.Any(card => card.IsCode(StrongPlays));
+                board.EnemyMonsters.Count > 0 && !hand.Any(card => card.IsCode(StrongPlays)) &&
+                (_gorzBaitTurn == -1 || _gorzBaitTurn == CurrentHeader.CurrentTurn);
             if (gorzBait)
             {
+                _gorzBaitTurn = CurrentHeader.CurrentTurn;
                 Log("Gorz in hand and no strong play: nothing set or summoned, the field stays empty for it");
                 return MainAction.ToEndPhase;
             }
@@ -494,8 +506,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (judgmentReady)
             {
                 bool lastResort = OpponentHasLethal(board);
-                if (SummonTrapPossible(board) && !lastResort)
-                    LogOnChange("Judgment Dragon waits: a set card may be Bottomless / Torrential");
+                if (SummonTrapKnown(board) && !lastResort)
+                    LogOnChange("Judgment Dragon waits: Dustshoot showed a Bottomless / Torrential and a set card may be it");
                 else if (OppressionStopsOurSpecialSummons(board))
                     LogOnChange("Judgment Dragon waits: Royal Oppression would negate it");
                 else if (!CanMill(4, board) && !lastResort)
@@ -526,7 +538,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (CanUseMonsterEffect(CardTrooper, board, board.EnemyMonsters) && TryActivate(state, CardTrooper, false, out var trooper))
                 return trooper;
 
-            if (TrySynchroSummon(state, board, out var synchro))
+            // Javier: no synchro into a field with no monsters (turn 2 into one set card, nothing to break): attack, and
+            // Lyla's effect in Main 2. With the deck low it still takes an End Phase miller off the field.
+            bool synchroWorthIt = board.EnemyMonsters.Count > 0 || DeckCount <= DeckCaution;
+            if (synchroWorthIt && TrySynchroSummon(state, board, out var synchro))
                 return synchro;
 
             // Plaguespreader back from the GY (a card from hand goes on top of the deck) for a synchro that pays off now.
@@ -562,6 +577,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 // Javier: "tenia pot of avarice y no lo uso siendo su unica carta en la mano?": our last card with an empty
                 // field goes no matter the names.
                 bool lastCard = hand.Count == 1 && board.OwnMonsters.Count + board.OwnSpells.Count == 0;
+                // Far behind, it still doesn't take the names a Judgment Dragon in hand needs right now (it left two dead, 2026-10-28).
+                if (farBehind && InHand(hand, JudgmentDragon) && GraveNames() >= 4 && !AvariceKeepsNames())
+                    farBehind = false;
                 bool forced = DeckCount <= DeckCaution || lifePoints <= 2000 || GraveCopies(JudgmentDragon) >= 2 || farBehind || lastCard;
                 if ((forced || (AvariceKeepsNames() && AvariceWorthIt())) && TryActivate(state, PotOfAvarice, false, out var avarice))
                 {
@@ -603,6 +621,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             {
                 Log("Card Destruction: most of the hand works better in the GY");
                 return destruction;
+            }
+            // Javier: at 2000 LP or less with no answer (no Roar / Mirror Force in hand, nothing set), it digs for one.
+            bool noAnswer = !hand.Any(card => card.IsCode(ThreateningRoar, MirrorForce)) && !board.OwnSpells.Any(card => !card.IsFaceup());
+            if (lifePoints <= 2000 && noAnswer && rest.Count >= 1 && CanMill(rest.Count, board) &&
+                TryActivate(state, CardDestruction, false, out var dig))
+            {
+                Log("Card Destruction: low LP and no answer in hand, digging for one");
+                return dig;
             }
 
             // Foolish only with a clear plan for this turn (Javier).
@@ -882,6 +908,28 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return honestWall.SetMonster();
             }
 
+            // Javier: nothing else to play and an empty field. Card Trooper first: face-up it mills "to see what comes"
+            // (a Plaguespreader makes Catastor), set it's one more body that draws when it dies. Then Honest set as a
+            // wall, which also bluffs a Ryko.
+            if (ownMonsters.Count == 0 && board.IsMain1)
+            {
+                if (DeckCount > DeckCaution && TryGetSummonable(state, CardTrooper, out var trooperMill))
+                {
+                    Log("Normal summon: Card Trooper, nothing else to play (mill and see)");
+                    return trooperMill.NormalSummon();
+                }
+                if (TryGetMonsterSettable(state, CardTrooper, out var trooperBody))
+                {
+                    Log("Setting Card Trooper: nothing else to play, one more body");
+                    return trooperBody.SetMonster();
+                }
+                if (TryGetMonsterSettable(state, Honest, out var honestBluff))
+                {
+                    Log("Setting Honest: nothing else to play (a wall, and it may pass for a Ryko)");
+                    return honestBluff.SetMonster();
+                }
+            }
+
             // Gardna / Plaguespreader are discard fodder: only as a last blocker.
             if (needBlocker)
             {
@@ -1007,21 +1055,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool battle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep;
                 var enemyMonsters = await GetEnemyMonsterCardsAsync();
                 bool threat = enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsAttack() && monster.Attack > 0);
-                // Javier: if it's about to be destroyed, chain it anyway (it died to a Heavy Storm unused). Heavy Storm
-                // always takes it; an MST / Icarus may be aimed elsewhere, so only with an attacker to stop.
+                // Javier: only two moments. When it's about to be destroyed (Heavy Storm, MST, Icarus) it goes no matter
+                // what; otherwise when they enter the Battle Phase with an attacker up. Not on their Main 1 plays.
                 var enemySpells = await GetEnemySpellCardsAsync();
                 bool theirChain = CurrentHeader.LastChainPlayer == ChainTracker.Opponent;
-                bool storm = theirChain && enemySpells.Any(spell => spell.IsFaceup() && spell.IsCode(CardKnowledge.HeavyStorm));
-                bool removal = theirChain && enemySpells.Any(spell => spell.IsFaceup() &&
-                    spell.IsCode(CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack));
-                // Javier: a monster effect (Hyunlei) destroyed it unused too. Any of their plays in their Main 1 with an
-                // attacker up: it stops this turn's attacks all the same.
-                bool mainPlay = theirChain && threat && phase == DuelPhase.Main1;
-                bool use = storm || (removal && threat) || mainPlay || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
+                bool destroyed = theirChain && enemySpells.Any(spell => spell.IsFaceup() &&
+                    spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack));
+                bool use = destroyed || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
                 if (use)
                 {
                     _roarTurn = CurrentHeader.CurrentTurn;
-                    Log($"Threatening Roar{(storm || removal || mainPlay ? " before it gets destroyed" : "")}");
+                    Log($"Threatening Roar{(destroyed ? " before it gets destroyed" : " on their Battle Phase")}");
                 }
                 return use;
             }
@@ -1051,9 +1095,30 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int attack = enemySide.BattlingMonster.Attack;
             if (!ownSide.HasBattlingMonster)
             {
-                bool lethal = attack >= ownSide.LifePoints;
-                Log($"Necro Gardna on a direct attack of {attack}: {(lethal ? "yes, it would kill us" : "no, not lethal")}");
-                return lethal;
+                // The game reopens a window on the same attack after its damage (it reads as Battle Start): our LP
+                // already dropped since we saw it declared, so there's nothing left to negate (2026-10-28).
+                var seen = (Turn: CurrentHeader.CurrentTurn, Sequence: (int)enemySide.BattlingMonster.CurrentCoordinates.Sequence, LifePoints: ownSide.LifePoints);
+                if (_gardnaAttack is { } last && last.Turn == seen.Turn && last.Sequence == seen.Sequence && ownSide.LifePoints < last.LifePoints)
+                {
+                    Log("Necro Gardna skipped: that attack already dealt its damage");
+                    return false;
+                }
+                if (_gardnaAttack is not { } same || same.Turn != seen.Turn || same.Sequence != seen.Sequence)
+                    _gardnaAttack = seen;
+
+                // Javier: count the attacks still to come. If together they kill us and negating one saves us, it goes,
+                // waiting for a bigger one when negating that one saves us too.
+                var waiting = (await GetEnemyMonsterCardsAsync())
+                    .Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked &&
+                        card.CurrentCoordinates.Sequence != enemySide.BattlingMonster.CurrentCoordinates.Sequence)
+                    .Select(card => card.Attack).ToList();
+                int total = attack + waiting.Sum();
+                bool kills = total >= ownSide.LifePoints;
+                bool savesUs = total - attack < ownSide.LifePoints;
+                bool biggerSaves = waiting.Any(other => other > attack && total - other < ownSide.LifePoints);
+                bool negate = attack >= ownSide.LifePoints || (kills && savesUs && !biggerSaves);
+                Log($"Necro Gardna on a direct attack of {attack} ({total} incoming): {(negate ? "yes, it would kill us" : kills && biggerSaves ? "no, a bigger one is coming" : "no, not lethal")}");
+                return negate;
             }
 
             var target = ownSide.BattlingMonster;
@@ -1167,6 +1232,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             var positions = context.StateData.Positions ?? Array.Empty<byte>();
             int cardId = context.StateData.CardID;
+            // Javier: Gorz's token is LIGHT; with Honest in hand it comes down in attack so Honest can use it.
+            if (CardIdentity.Same(cardId, GorzToken) && (CurrentField.OwnSide.Hand ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, Honest)) &&
+                positions.Contains((byte)CardPosition.FaceUpAttack))
+            {
+                Log($"{cardId} in attack: Honest in hand");
+                return CardPosition.FaceUpAttack;
+            }
             // Gorz, its token and Tragoedia come down in defense to stop the attack (Javier).
             if ((CardIdentity.Same(cardId, Gorz) || CardIdentity.Same(cardId, GorzToken) || CardIdentity.Same(cardId, Tragoedia)) &&
                 positions.Contains((byte)CardPosition.FaceUpDefence))
@@ -1530,6 +1602,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 LogOnChange($"Plaguespreader: synchro to take an End Phase miller off the field ({DeckCount} cards left)");
                 return true;
             }
+            // No monsters of theirs: nothing for a synchro to do (Javier).
+            if (board.EnemyMonsters.Count == 0)
+                return false;
             // Its cost puts a card from hand on top of the deck: only a cheap one.
             if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
                 return false;

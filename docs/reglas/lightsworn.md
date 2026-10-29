@@ -125,7 +125,7 @@ Código: `DecideNormalSummon`
 **Probabilidad de Bottomless:** si invocás un monstruo de 1500+ y el rival lo deja pasar con sus cartas seteadas, esas cartas cuentan como "probablemente no Bottomless" y no frenan a JD ni al synchro. Si el rival cambia sus cartas seteadas, se olvida.
 
 **Y aun así espera si:**
-- una carta seteada del rival pueda ser Bottomless o Torrential (las que todavía le puedan quedar). Excepción: el rival tiene lethal en campo (es la única jugada para no perder);
+- **Bottomless o Torrential vistos con Dustshoot:** solo espera si viste uno en la mano del rival que todavía no apareció (cementerio, campo, desterradas), y tiene una carta seteada que puede ser esa. Si no la viste, se arriesga al 50/50: esperar le hace perder momento y tempo. Excepción: el rival tiene lethal en campo (es la única jugada para no perder);
 - Royal Oppression la negaría;
 - su mill de la End Phase (4) lo dejaría en el piso de 6.
 
@@ -135,7 +135,7 @@ Código: `DecideNormalSummon`
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
 - **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token y ninguno de tus monstruos le gana, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos. Contra un token que JD o Wulf pueden sacar, no (barrió 4 propios por un token de 2100).
 
-Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapPossible`
+Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `SummonTrapKnown`
 
 ### Contra Tytannial
 
@@ -152,7 +152,8 @@ Código: `TytannialPlan`, `DecideNormalSummon`, `ChargeSearchOrder`, `Plaguespre
 ### Gorz
 
 **Se invoca cuando no controlás cartas.**
-- Siempre en defensa, y su token también.
+- Siempre en defensa, y su token también. **Excepción:** con Honest en mano, el token (es LIGHT) va en ataque para poder usar Honest con él.
+- **Como cebo, un solo turno:** con Gorz en mano y nada fuerte para jugar, el bot deja el campo vacío. Si al turno siguiente sigue sin salir, juega normal (pasar dos turnos con 6 cartas delató a Gorz).
 - Espera al último ataque (el token sale más grande): si todavía falta atacar un monstruo con más ATK que el golpe recibido, no lo baja. También al inicio de la batalla (antes salía ahí sin esperar).
 - Si el golpe ya fue el más fuerte, o lo que falta atacar te mata, lo baja enseguida.
 
@@ -171,6 +172,7 @@ Código: `FindTragoediaSteal`
 ### Pot of Avarice
 
 **Se usa si después quedan 4 nombres en el cementerio y hay algo que valga la pena recuperar** (2 o más de: JD, Honest, Gorz, Tragoedia, Celestia, Lumina, Card Trooper). Sí o sí con 15 cartas o menos en el deck, con 2000 LP o menos, con los 2 JD en el cementerio, si vas muy atrás (3500 LP o más de diferencia y 3 cartas o más de diferencia en el campo), o si es tu única carta en la mano con el campo vacío.
+- **Yendo muy atrás, no si mata a JD:** si tenés JD en mano con sus 4 nombres y la Pot te deja con menos, no se usa (dejó 2 JD muertos).
 - Devuelve en este orden: las copias repetidas, los demás monstruos, JD, una copia de cada nombre y, por último, Necro Gardna y Plaguespreader.
 
 Código: `AvariceKeepsNames`, `AvaricePicks`
@@ -200,6 +202,7 @@ Código: `DecideSpells`
 No está en la lista actual (va Monster Reincarnation), pero la regla queda por si vuelve:
 
 **Se usa cuando al menos la mitad del resto de la mano son cartas que rinden más en el cementerio** (Wulf, Plaguespreader, Necro Gardna), con 2 cartas o más para descartar.
+- **También con 2000 LP o menos y sin respuesta:** ni Roar ni Mirror Force en mano y nada seteado. Va a buscar una (se la guardó con lethal encima).
 
 Código: `DecideSpells`
 
@@ -220,6 +223,7 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 
 **Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
+- **Nunca si el rival no tiene monstruos** (ni este synchro ni ningún otro): no hay nada que romper. Se ataca y Lyla usa su efecto en la Main 2. Gastó Foolish, Plaguespreader, Lyla y Gardna en un turno 2 contra una sola carta seteada. Excepción: deck en 15 o menos, para sacar a Jain.
 - El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.
 - Brionac como jugada de valor solo si tenés 2 cartas baratas en mano (una va arriba del deck y la otra paga su efecto); si no, solo si da lethal.
 - **Con el deck en 15 o menos y un Lightsworn que muele en la End Phase en campo (Jain):** sincro con él para sacarlo del campo, aunque haya riesgo de Bottomless y con cualquier carta arriba del deck (menos JD). Se quedó quieto con Plaguespreader en el cementerio y perdió por deck-out.
@@ -253,7 +257,8 @@ Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffec
 - un Lightsworn (Ryko incluido), si tenés Celestia en mano para tributarlo al turno siguiente;
 - un LIGHT en ataque que Honest también salvaría: va Gardna y Honest queda para una amenaza mayor.
 - Nunca Card Trooper.
-- También ante un ataque directo que te mataría.
+- **Ataques directos:** suma este ataque y los que les quedan. Si juntos te matan y negar este te salva, va. Pero si después viene uno más grande cuya negación también te salva, espera a ese. Un ataque que solo te mata también va. Se comió 1800 y 2400 y la usó en el tercero.
+- Si el juego reabre la ventana del mismo ataque después del daño (tus LP ya bajaron), no se usa: ya no hay nada que negar.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
 
 Código: `ShouldUseGardnaAsync`
@@ -269,6 +274,7 @@ Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 ### Card Trooper
 
 **Muele 3 mientras sirva (queda algún Wulf en el deck o faltan nombres para JD); si no, 1.** Se activa en la Main 1 de tu turno (o en la Main 2 si no se usó, por ejemplo un Trooper robado en batalla), solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
+- **Sin otra jugada y con el campo vacío:** Card Trooper baja igual. Boca arriba muele "para ver qué sale" (un Plaguespreader da Catastor). Con el deck en 15 o menos, seteado: es un cuerpo más y roba al morir.
 
 Código: `OnAnnounceNumberAsync`, `TrooperMills`
 
@@ -289,7 +295,7 @@ Código: `DecideOwnEffectAsync`
 - Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal o que Ryko sea el tributo de Celestia (en mano) para el turno siguiente.
 - Una vez por batalla.
 
-**Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP.
+**Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP. **Si no hay otra jugada** (ni Card Trooper), se setea igual: tapa un ataque y puede pasar por un Ryko. Pasó dos turnos con el campo vacío y Honest en mano y se comió 7700.
 
 **Farol:** un LIGHT boca arriba en ataque no pasa a defensa si su DEF tampoco aguantaría al atacante más fuerte del rival y tenés 3000 LP o más. Pasar a defensa le avisa al rival que no tenés Honest, y solo salva la diferencia de LP.
 
@@ -299,9 +305,11 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
-**En el turno rival, al entrar en batalla (o al declarar un ataque) si tienen un monstruo en ataque.** Una por turno (encadenó dos seguidas). Se setea una sola copia por vez.
-- **Si la van a destruir, se encadena igual:** siempre contra Heavy Storm; contra MST o Icarus (pueden apuntar a otra) solo si el rival tiene un monstruo en ataque.
-- **Cualquier jugada del rival en su Main 1** (por ejemplo el efecto de Hyunlei, que la rompió sin usar) con un monstruo suyo en ataque: se encadena, frena los ataques de ese turno igual.
+**Solo dos momentos:**
+- **Cuando el rival entra en batalla** (o declara un ataque) con un monstruo en ataque.
+- **Si la van a destruir** (Heavy Storm, MST, Icarus), siempre, aunque no haya atacantes.
+
+Una por turno (encadenó dos seguidas). Se setea una sola copia por vez. Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
 
 Código: `DecideOwnEffectAsync`
 
