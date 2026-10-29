@@ -63,6 +63,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private HashSet<int> _lylaFromLastTurn = new();
         private int _gorzBaitTurn = -1;
         private (int Turn, int Sequence, int LifePoints)? _gardnaAttack;
+        private bool _rykoFlipped;
+        private bool _stardustUp;
 
         public LightswornBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -93,6 +95,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _lylaFromLastTurn = new();
             _gorzBaitTurn = -1;
             _gardnaAttack = null;
+            _rykoFlipped = false;
         }
 
         protected override int[] SynchroPriority { get; } =
@@ -128,7 +131,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Honest gives a LIGHT monster the ATK of the monster it battles: counted as a big pump for "can we beat it".
         protected override int BattleBoostInHand(List<DynamicCard> hand) => hand.Any(card => card.IsCode(Honest)) ? 2000 : 0;
 
-        protected override bool CanBeBoosted(DynamicCard card) => (card.Attribute & LightAttribute) != 0;
+        // Javier: Honest is defensive first. We only attack counting on it into a face-up Stardust (Celestia's plan).
+        protected override bool CanBeBoosted(DynamicCard card) => (card.Attribute & LightAttribute) != 0 && _stardustUp;
 
         protected override int HandValue(DynamicCard card)
         {
@@ -405,15 +409,16 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 board.Hand.Any(card => !card.IsCode(Lumina, JudgmentDragon) && !(board.TargetingBlocked && card.IsCode(Honest))),
             Tragoedia => FindTragoediaSteal(board).HasValue,
             CardTrooper => TrooperMills(board),
-            // Back to the hand in Main Phase 2, after hitting (Javier: "se pega en Main 1 y en Main 2 se vuelve a la mano").
-            // Below 3000 LP it stays as a 1900 DEF wall.
-            Honest => IsBotTurn && !board.IsMain1 && CurrentField.OwnSide.LifePoints >= 3000,
+            // Back to the hand in Main Phase 2, always (Javier: "no tiene sentido dejarlo en el campo bajo ninguna
+            // circunstancia"; at 2000 LP it stayed and Black Rose took it).
+            Honest => IsBotTurn && !board.IsMain1,
             _ => true
         };
 
         protected override async Task<IdleCmdResponse?> DecideMainPhaseAsync(DecisionContext<IdleCmdData> context, Board board)
         {
             _avoidedTarget = await AvoidedMonsterEffectTargetsAsync(destroying: true);
+            _stardustUp = board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(StardustDragon));
             return DecideMainPhase(context, board);
         }
 
@@ -438,7 +443,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && !PlasmaNegates(board))
             {
                 Log("Flip summoning Ryko");
+                _rykoFlipped = true;
                 return ryko.Reposition();
+            }
+
+            // Javier: a set Honest flips to get rid of a set monster or a token, then goes back to the hand in Main 2.
+            // Not when losing it as a blocker leaves them lethal next turn: then it stays set.
+            if (IsBotTurn && board.IsMain1 && state.CanBattlePhase && TryGetReposable(state, Honest, out var setHonest) && !setHonest.IsFaceup() &&
+                board.EnemyMonsters.Any(card => !card.IsFaceup() || ((card.Type & CardKnowledge.TokenType) != 0 && card.GetRealPower() < 1100)) &&
+                !OpponentHasLethal(board, -1))
+            {
+                Log("Flipping the set Honest: it hits their set monster / token and goes back to the hand in Main 2");
+                return setHonest.Reposition();
             }
 
             // Draws and mills next: they only leave cards in the GY, so they never feed Gorz's condition.
@@ -540,7 +556,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Javier: no synchro into a field with no monsters (turn 2 into one set card, nothing to break): attack, and
             // Lyla's effect in Main 2. With the deck low it still takes an End Phase miller off the field.
-            bool synchroWorthIt = board.EnemyMonsters.Count > 0 || DeckCount <= DeckCaution;
+            // Tokens don't count (Goyo into a lone token with their backrow set, 2026-10-29).
+            bool synchroWorthIt = RealEnemyMonsters(board) > 0 || DeckCount <= DeckCaution;
             if (synchroWorthIt && TrySynchroSummon(state, board, out var synchro))
                 return synchro;
 
@@ -894,7 +911,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Honest: poke when nothing else can be summoned and they have no real threat (nothing above 1100 ATK);
             // it goes back to the hand in Main Phase 2. As a 1900 DEF wall only below 3000 LP.
-            bool noThreat = board.EnemyMonsters.All(card => card.IsFaceup() && card.Attack <= 1100);
+            // Only when it's safe: no set card of theirs (it ran into a Mirror Force with Wulf and Lumina, 2026-10-29).
+            bool noThreat = board.EnemyMonsters.All(card => card.IsFaceup() && card.Attack <= 1100) &&
+                !board.EnemySpells.Any(card => !card.IsFaceup());
             if (board.IsMain1 && state.CanBattlePhase && noThreat && TryGetSummonable(state, Honest, out var honest))
             {
                 Log("Honest pokes: no real threat on their side");
@@ -928,6 +947,19 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     Log("Setting Honest: nothing else to play (a wall, and it may pass for a Ryko)");
                     return honestBluff.SetMonster();
                 }
+                if (!InHand(hand, NecroGardna) && TryGetMonsterSettable(state, Plaguespreader, out var plagueBody))
+                {
+                    Log("Setting Plaguespreader: nothing else to play, one body is better than an empty field");
+                    return plagueBody.SetMonster();
+                }
+            }
+
+            // Javier: Gardna is one more body to set, not only when losing: it passes for a Ryko (when no real Ryko is
+            // in hand) and from the GY it still negates an attack.
+            if (board.IsMain1 && !InHand(hand, Ryko) && TryGetMonsterSettable(state, NecroGardna, out var gardnaBody))
+            {
+                Log("Setting Necro Gardna: one more body, it passes for a Ryko");
+                return gardnaBody.SetMonster();
             }
 
             // Gardna / Plaguespreader are discard fodder: only as a last blocker.
@@ -1212,7 +1244,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 // With Honest the damage is our own ATK (we gain exactly theirs): lethal it wasn't before.
                 int lifePoints = CurrentField.EnemySide.LifePoints;
                 bool lethal = theirs.IsAttack() && ours.Attack >= lifePoints && ours.Attack - theirs.Attack < lifePoints;
-                use = (turnsIt && !ours.IsCode(Sacrificable)) || lethal;
+                // Javier: Honest is defensive first. On our turn only for lethal or into Stardust; otherwise it waits
+                // for their attacks.
+                use = lethal || (turnsIt && theirs.IsCode(StardustDragon));
+                if (turnsIt && !lethal)
+                    Log("Honest kept for their turn (defense first)");
             }
             else
             {
@@ -1304,7 +1340,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // and it summons itself.
             if (All(CardLocation.Hand) && hint == DHint.TODECK)
                 return Picked("On top of the deck", PickInOrder(state, new[] { Wulf, NecroGardna, Plaguespreader }
-                    .Concat(LightswornMonsters.Where(id => id != Lumina && GraveCopies(id) > 0)).ToArray()), selectable);
+                    .Concat(LightswornMonsters.Where(id => id != Lumina && GraveCopies(id) > 0))
+                    .Concat(new[] { FoolishBurial, ChargeOfTheLightBrigade, SolarRecharge, PotOfAvarice })
+                    .Concat(hand.Where(card => !card.IsCode(JudgmentDragon)).Select(card => card.ID)).ToArray()), selectable);
 
             // Charge of the Light Brigade's search.
             if (All(CardLocation.Deck) && hint == DHint.ATOHAND)
@@ -1343,8 +1381,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Ryko, Celestia and Lyla break their backrow first (Javier: clear it before Judgment Dragon).
-            if (_pendingEffect == 0 && !IsBotTurn && hint == DHint.DESTROY)
+            // Also after our own flip (Javier: flipped into Tytannial + Stardust it destroyed instead of only milling).
+            if (_pendingEffect == 0 && (!IsBotTurn || _rykoFlipped) && hint == DHint.DESTROY)
                 _pendingEffect = Ryko;
+            _rykoFlipped = false;
             // Javier: against a Stardust that would negate it, or a Tytannial with Plants to tribute, Ryko skips the
             // destruction and only mills.
             var rykoBoard = _pendingEffect == Ryko && state.Minimum == 0 ? await BuildBoardAsync() : null;
@@ -1497,8 +1537,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return order.ToArray();
         }
 
+        // Only while Gardna (limited to 1) is still in the deck: it was already in the GY and Foolish sent a Celestia.
         private bool GardnaPlan(Board board) =>
-            InHand(board.Hand, Celestia) && board.OwnMonsters.Any(card => card.IsFaceup() && card.IsCode(LightswornMonsters));
+            InHand(board.Hand, Celestia) && board.OwnMonsters.Any(card => card.IsFaceup() && card.IsCode(LightswornMonsters)) &&
+            GraveCopies(NecroGardna) == 0 && !InHand(board.Hand, NecroGardna) && !board.OwnMonsters.Any(card => card.IsCode(NecroGardna)) &&
+            !(CurrentField.OwnSide.Banish ?? Array.Empty<int>()).Any(id => CardIdentity.Same(id, NecroGardna));
+
+        private static int RealEnemyMonsters(Board board) =>
+            board.EnemyMonsters.Count(card => (card.Type & CardKnowledge.TokenType) == 0);
 
         private bool PlaguespreaderFoolishPlan(Board board) =>
             GraveCopies(Plaguespreader) == 0 && !InHand(board.Hand, Plaguespreader) &&
@@ -1561,10 +1607,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 order.Add(Wulf);
             if (PlaguespreaderGoyoNextTurn(board))
                 order.Add(Plaguespreader);
-            order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
-            order.AddRange(new[] { Wulf, NecroGardna });
+            // Javier: then Wulf, Plaguespreader, Gardna. Another Lightsworn only for a missing name with Judgment Dragon
+            // in hand (it sent a Garoth and a Celestia for nothing).
+            if (InHand(board.Hand, JudgmentDragon) && GraveNames() < 4)
+                order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
+            order.AddRange(new[] { Wulf, Plaguespreader, NecroGardna });
             order.AddRange(LightswornMonsters);
-            order.Add(Plaguespreader);
             return order.ToArray();
         }
 
@@ -1602,10 +1650,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 LogOnChange($"Plaguespreader: synchro to take an End Phase miller off the field ({DeckCount} cards left)");
                 return true;
             }
-            // No monsters of theirs: nothing for a synchro to do (Javier).
-            if (board.EnemyMonsters.Count == 0)
+            // No monsters of theirs (tokens don't count): nothing for a synchro to do (Javier).
+            if (RealEnemyMonsters(board) == 0)
                 return false;
-            // Its cost puts a card from hand on top of the deck: only a cheap one.
+            // Its cost puts a card from hand on top of the deck: only a cheap one. For a Goyo that steals their monster
+            // (Stardust), any card but Judgment Dragon (Javier).
+            bool goyoSteal = ScoreSynchro(GoyoGuardian, board) > 30 &&
+                board.OwnMonsters.Any(card => card.IsFaceup() && card.Level == 4 && !card.HasType((CardType)CardKnowledge.TunerType));
+            if (goyoSteal && board.Hand.Any(card => !card.IsCode(JudgmentDragon, Plaguespreader)))
+            {
+                LogOnChange("Plaguespreader: Goyo steals their monster, any card but Judgment Dragon goes on top");
+                return true;
+            }
             if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
                 return false;
 

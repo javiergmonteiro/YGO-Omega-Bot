@@ -1725,7 +1725,10 @@ namespace BotTest.Game.AI.Brains
             {
                 DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints) && !StrongerAttackerWaiting(attacker, enemyMonsters, lifePoints),
                 // Not on a lone Card Trooper: it draws them a card when destroyed, a +1 for them (Javier).
+                // Not when the only attacker is a monster with a union equipped (Gearframe on Machina Fortress): only the
+                // union dies and the attack goes on (2026-10-29).
                 MirrorForce => attacker.HasValue && !LoneCardTrooper(attacker.Value, enemyMonsters, lifePoints) &&
+                    !(IsProtectedByUnion(attacker.Value, enemySpells) && enemyMonsters.Count(m => m.IsAttack()) == 1) &&
                     (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),

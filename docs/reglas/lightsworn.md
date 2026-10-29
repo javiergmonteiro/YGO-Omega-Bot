@@ -39,9 +39,10 @@ Código: `MaterialCost`
 
 Orden en que el bot decide en la Main Phase (la primera regla que se cumple, juega y vuelve a preguntar). Antes corren las aperturas generales (Trap Dustshoot, Heavy Storm cuando conviene, etc.). Después corren los efectos de monstruo y los sets de trampas. El resto del fallback genérico no invoca, no setea ni activa ninguna carta del mazo.
 
-1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya; tampoco lo da vuelta la lógica genérica), ni contra Tytannial (niega el objetivo) ni con Plasma.
+1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya; tampoco lo da vuelta la lógica genérica) ni con Plasma. Con Stardust o con Tytannial que tiene Plantas para tributar, se da vuelta igual pero solo muele (ver Ryko, Celestia y Lyla).
+   - **Honest seteado:** se da vuelta para pegarle a un monstruo seteado o a un token, y vuelve a la mano en la Main 2. No si sacarlo del campo deja al rival con lethal el turno siguiente: ahí queda seteado.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
-3. **Gorz como cebo.** Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
+3. **Gorz como cebo** (un solo turno). Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
 4. **Efecto de Lyla** si el rival tiene backrow y nada lo niega (ni Stardust ni Plasma). Cuándo y cómo:
    - **2 cartas seteadas o más, sin monstruo seteado del rival:** efecto con prioridad apenas se invoca. Lo obliga a usar sus trampas de invocación. No ataca primero.
    - **2 cartas seteadas o más y un monstruo seteado del rival:** sin prioridad. Deja pasar su ventana de invocación (Bottomless) y después activa el efecto en Main 1.
@@ -213,7 +214,8 @@ Código: `DecideSpells`
 2. Plaguespreader, si se cumple su plan de synchro (ver su ficha).
 3. Wulf, si tenés 2 Celestia en mano, el rival tiene 2 cartas o más y no hay un Lightsworn en tu campo: Wulf se invoca solo y es el tributo de Celestia, que rompe 2.
 4. Plaguespreader para un Goyo (nivel 6) el turno siguiente, si Goyo tiene un buen robo, tenés un Lightsworn nivel 4, una carta barata para su costo, y el rival no tiene lethal en campo (si no llegás al turno siguiente, no hay plan).
-- Si no queda otra opción que mandar algo, Plaguespreader va último.
+- El plan de Gardna solo vale si Gardna (está limitada a 1) sigue en el mazo. Ya estaba en el cementerio y Foolish mandó una Celestia.
+- **Si el plan no da, el orden de relleno es Wulf, Plaguespreader y Gardna.** Otro Lightsworn solo si tenés JD en la mano y le falta ese nombre para los 4 (mandó un Garoth y una Celestia porque sí).
 5. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
 - Si no hay plan, no se usa.
 
@@ -223,10 +225,11 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 
 **Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
-- **Nunca si el rival no tiene monstruos** (ni este synchro ni ningún otro): no hay nada que romper. Se ataca y Lyla usa su efecto en la Main 2. Gastó Foolish, Plaguespreader, Lyla y Gardna en un turno 2 contra una sola carta seteada. Excepción: deck en 15 o menos, para sacar a Jain.
+- **Nunca si el rival no tiene monstruos (los tokens no cuentan)** (ni este synchro ni ningún otro): no hay nada que romper. Goyo contra un token solo y con backrow seteada fue un desperdicio. Se ataca y Lyla usa su efecto en la Main 2. Gastó Foolish, Plaguespreader, Lyla y Gardna en un turno 2 contra una sola carta seteada. Excepción: deck en 15 o menos, para sacar a Jain.
 - El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.
 - Brionac como jugada de valor solo si tenés 2 cartas baratas en mano (una va arriba del deck y la otra paga su efecto); si no, solo si da lethal.
 - **Con el deck en 15 o menos y un Lightsworn que muele en la End Phase en campo (Jain):** sincro con él para sacarlo del campo, aunque haya riesgo de Bottomless y con cualquier carta arriba del deck (menos JD). Se quedó quieto con Plaguespreader en el cementerio y perdió por deck-out.
+- **Goyo que roba un monstruo del rival (Stardust):** para revivirlo vale cualquier carta de la mano menos JD (Foolish, Heavy Storm, Pot...). No se hizo por no tener una carta barata.
 - Para revivirlo pone una carta de la mano arriba del deck, y tiene que ser barata: Wulf, Necro Gardna, Plaguespreader o un Lightsworn cuyo nombre ya está en el cementerio (no Lumina). Si no hay, no se hace (economía de cartas).
 
 Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
@@ -244,7 +247,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 
 **Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
-- **Ryko contra Stardust:** no destruye nada (Stardust lo negaría) y solo muele. Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
+- **Ryko contra Stardust o Tytannial con Plantas para tributar:** no destruye nada (lo negarían) y solo muele. Vale tanto si lo da vuelta el ataque del rival como si lo da vuelta el bot (antes, en el flip propio, apuntaba a Stardust). Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
 - **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
@@ -261,6 +264,8 @@ Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffec
 - Si el juego reabre la ventana del mismo ataque después del daño (tus LP ya bajaron), no se usa: ya no hay nada que negar.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
 
+**Como cuerpo seteado:** si no hay otra invocación y no tenés un Ryko de verdad en la mano, se setea aunque no vayas perdiendo: pasa por un Ryko y, si muere, desde el cementerio niega un ataque igual.
+
 Código: `ShouldUseGardnaAsync`
 
 ### Ryko y Card Trooper son sacrificables
@@ -274,7 +279,7 @@ Código: `Sacrificable`, `MaterialCost`, `PlaguespreaderPlan`
 ### Card Trooper
 
 **Muele 3 mientras sirva (queda algún Wulf en el deck o faltan nombres para JD); si no, 1.** Se activa en la Main 1 de tu turno (o en la Main 2 si no se usó, por ejemplo un Trooper robado en batalla), solo con más de 15 cartas en el deck (o con lethal). Con 15 o menos se setea boca abajo y no muele (molió con 5, 3 y 1 carta y perdió por deck-out).
-- **Sin otra jugada y con el campo vacío:** Card Trooper baja igual. Boca arriba muele "para ver qué sale" (un Plaguespreader da Catastor). Con el deck en 15 o menos, seteado: es un cuerpo más y roba al morir.
+- **Sin otra jugada y con el campo vacío:** Card Trooper baja igual. Si no hay, Honest seteado y después Plaguespreader seteado. Boca arriba muele "para ver qué sale" (un Plaguespreader da Catastor). Con el deck en 15 o menos, seteado: es un cuerpo más y roba al morir.
 
 Código: `OnAnnounceNumberAsync`, `TrooperMills`
 
@@ -288,12 +293,16 @@ Código: `DecideOwnEffectAsync`
 ### Honest
 
 **En el damage step:**
-- Atacando: si tu monstruo LIGHT no gana o rebota y con Honest gana, o si con Honest el daño da lethal.
+- **Atacando, solo si da lethal o contra Stardust.** La prioridad es defensiva: Honest se guarda para el turno rival. El bot ya no ataca contando con Honest salvo contra Stardust (gastó un Honest con Lyla contra Neos Alius).
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
 - No contra una Machina Fortress con Gearframe equipado (se destruye el Gearframe y no se gana nada).
 - No contra Catastor boca arriba: su efecto destruye a tu LIGHT al inicio del damage step igual.
 - Nunca para salvar un sacrificable (Ryko, Card Trooper), salvo que dé lethal o que Ryko sea el tributo de Celestia (en mano) para el turno siguiente.
 - Una vez por batalla.
+
+**Vuelve a la mano en la Main 2, siempre** (antes se quedaba con menos de 3000 LP y Black Rose se lo llevó).
+
+**Pinchar (ataque directo sin amenaza):** solo si el rival no tiene monstruos de más de 1100 ATK **ni cartas seteadas** (se comió un Mirror Force con Wulf y Lumina).
 
 **Como muro (1900 DEF):** con el campo vacío, si su defensa aguanta al atacante más fuerte del rival, o con menos de 3000 LP. **Si no hay otra jugada** (ni Card Trooper), se setea igual: tapa un ataque y puede pasar por un Ryko. Pasó dos turnos con el campo vacío y Honest en mano y se comió 7700.
 

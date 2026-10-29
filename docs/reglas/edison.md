@@ -314,6 +314,7 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 - **Excepción: cuando el que ataca es la propia Stardust, se activa.** Si Stardust la niega, se tributa y su ataque se cae.
 - No se encadena un segundo si ya respondimos la cadena.
 - **No contra un Card Trooper solo:** si el único monstruo del rival en ataque es Card Trooper (y no es letal), no se activa. Al destruirse le roba una carta, así que es un +1 para él.
+- **No contra un monstruo con una unión equipada** (Gearframe en Machina Fortress) si es su único monstruo en ataque: solo muere la unión y el ataque sigue.
 
 **Si vimos una Mirror Force en su mano:** solo atacamos con un monstruo por batalla si ellos tienen backrow seteado y todavía queda una copia posible (banlist). Una vez que ya atacó uno, pasa a Main 2 o End.
 
