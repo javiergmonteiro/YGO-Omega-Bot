@@ -39,7 +39,7 @@ Código: `MaterialCost`
 
 Orden en que el bot decide en la Main Phase (la primera regla que se cumple, juega y vuelve a preguntar). Antes corren las aperturas generales (Trap Dustshoot, Heavy Storm cuando conviene, etc.). Después corren los efectos de monstruo y los sets de trampas. El resto del fallback genérico no invoca, no setea ni activa ninguna carta del mazo.
 
-1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya; tampoco lo da vuelta la lógica genérica) ni con Plasma. Con Stardust o con Tytannial que tiene Plantas para tributar, se da vuelta igual pero solo muele (ver Ryko, Celestia y Lyla).
+1. **Flipear Ryko**, lo primero del turno (Main 1), antes que cualquier otra cosa, para limpiar la backrow. No si el rival no tiene cartas (rompería una tuya; tampoco lo da vuelta la lógica genérica) ni con Plasma. **Con Stardust o con Tytannial que tiene Plantas para tributar, no se da vuelta:** el juego obliga a Ryko a elegir un objetivo, se lo niegan y muere por una ficha (2026-10-30). Queda seteado.
    - **Honest seteado:** se da vuelta para pegarle a un monstruo seteado o a un token, y vuelve a la mano en la Main 2. No si sacarlo del campo deja al rival con lethal el turno siguiente: ahí queda seteado.
 2. **Magias de robo y mill** (ver cada carta): Pot of Avarice, Solar Recharge, Charge of the Light Brigade, Monster Reincarnation, Card Destruction, Foolish Burial.
 3. **Gorz como cebo** (un solo turno). Si tenés Gorz en mano, el campo vacío, el rival tiene monstruos y no tenés una jugada fuerte (Ryko, Lumina, Jain), el bot no setea ni invoca nada y pasa al End Phase.
@@ -133,6 +133,7 @@ Código: `DecideNormalSummon`
 **Su efecto (1000 LP, destruye todas las demás cartas), parecido a Black Rose:**
 - Se usa si el rival tiene más cartas que vos en el campo (sin contar a JD, ni a Ryko ni a Card Trooper, que no se pierden: Trooper encima roba). Primero el efecto, después desplegar.
 - No con Stardust activo (lo negaría).
+- **No si un ataque con Honest ya da lethal:** un LIGHT tuyo en ataque cuyo ATK alcanza sus LP, Honest en la mano, un monstruo del rival boca arriba en ataque para pegarle, un monstruo suyo seteado y ninguna carta seteada atrás. El efecto mandaría ese seteado (¿Necro Gardna?) al cementerio, desde donde niega el ataque. Así te ganó Javier en el mirror.
 - Con 2000 LP o más, como regla general. Por debajo de 2000, solo si JD da lethal ese turno, si el rival tiene lethal, o si un segundo JD baja después para atacar con los dos.
 - **Gorz en Main 2:** si después de atacar el rival tiene Gorz o su token y ninguno de tus monstruos le gana, el efecto se usa (otra vez) en la Main 2 para limpiar todo, cueste lo que cueste (más de 1000 LP). El token de 3000 DEF frenó a dos JD durante dos turnos. Contra un token que JD o Wulf pueden sacar, no (barrió 4 propios por un token de 2100).
 
@@ -141,7 +142,7 @@ Código: `JudgmentReason`, `JudgmentWipeWorthIt`, `SecondJudgmentReady`, `Summon
 ### Contra Tytannial
 
 **Con una Tytannial boca arriba (niega todo lo que apunta tributando una Planta, ella misma incluida), el bot sigue este plan.** Si tiene lethal pasando por ella, lo ignora.
-- **Ryko:** se setea primero y se flipea aunque esté Tytannial. Sola, apunta a ella y Tytannial se tributa a sí misma. **Si tiene otras Plantas para tributar, Ryko solo muele** (no destruye nada). Charge busca Ryko primero si no hay uno en mano.
+- **Ryko:** se setea primero y se flipea aunque esté Tytannial. Sola, apunta a ella y Tytannial se tributa a sí misma. **Si tiene otras Plantas para tributar, Ryko no se da vuelta** (el juego lo obliga a elegir objetivo y lo niegan). Charge busca Ryko primero si no hay uno en mano.
 - **Con Plantas para tributar, nada que apunte** (tampoco Lyla). Lo que sirve es la batalla: **Honest se guarda para ella**, nunca se descarta (Lumina tampoco lo descarta) ni se usa en otra batalla, salvo que esa batalla te mate. Catastor sube de prioridad.
 - **Judgment Dragon:** esperar los 4 nombres (los monstruos boca arriba muelen) y bajarlo, porque su wipe no apunta. El wipe se usa si ninguno de tus monstruos le gana a Tytannial en batalla.
 - **Con Plaguespreader:** un nivel 3 (Card Trooper, Lumina) hace Catastor (si Tytannial no es DARK); un nivel 4 hace Goyo, que choca con empate contra ella.
@@ -180,17 +181,24 @@ Código: `AvariceKeepsNames`, `AvaricePicks`
 
 ### Solar Recharge
 
-**Se usa si hay un Lightsworn para descartar** y el mill no deja el deck en el piso.
-- Qué descarta: Wulf, después un Lightsworn repetido en la mano que todavía no esté en el cementerio, después uno que falte en el cementerio, después uno repetido. Lumina solo si es lo único.
+**Se usa si hay un Lightsworn para descartar que no sea Lumina ni Jain** y el mill no deja el deck en el piso. Lumina nunca se descarta y Jain se puede guardar.
+- Qué descarta: Wulf, después un Lightsworn repetido en la mano que todavía no esté en el cementerio, después uno que falte en el cementerio, después uno repetido. Jain y Lumina al final.
 
 Código: `SolarDiscardOrder`
 
 ### Charge of the Light Brigade
 
-**Se usa siempre que el mill no deje el deck en el piso.**
-- Qué busca: Lumina si hay algo para revivir (puede traer a Lyla también), después Lyla si el rival tiene backrow, después un nombre que no esté en el cementerio ni en la mano.
+**Hay una sola copia: se usa solo para buscar algo que conteste el campo de ese momento** (o un nombre que le falta a un JD en la mano), y que el mill no deje el deck en el piso. **Yendo primero, en el turno 1 se guarda.**
+- Qué busca, en orden (si no lo tenés en la mano):
+  - Ryko, con el plan contra Tytannial.
+  - Lyla, si hay que limpiar la backrow del rival.
+  - Jain, si hay que atacar: el rival no tiene monstruos o tiene uno que Jain le gana.
+  - Lumina, para tener presencia en el campo y moler (tu campo vacío) o si hay algo para revivir.
+  - Ehren, si el rival tiene un monstruo boca abajo (lo devuelve al mazo).
+- Con JD en la mano: después, un nombre que falte en el cementerio.
+- Garoth y Druid solo si no hay nada más que buscar (Druid es muy situacional). Ryko solo con el plan de Tytannial.
 
-Código: `ChargeSearchOrder`
+Código: `ChargeAnswers`, `ChargeSearchOrder`, `DecideSpells`
 
 ### Monster Reincarnation
 
@@ -216,6 +224,7 @@ Código: `DecideSpells`
 4. Plaguespreader para un Goyo (nivel 6) el turno siguiente, si Goyo tiene un buen robo, tenés un Lightsworn nivel 4, una carta barata para su costo, y el rival no tiene lethal en campo (si no llegás al turno siguiente, no hay plan).
 - El plan de Gardna solo vale si Gardna (está limitada a 1) sigue en el mazo. Ya estaba en el cementerio y Foolish mandó una Celestia.
 - **Si el plan no da, el orden de relleno es Wulf, Plaguespreader y Gardna.** Otro Lightsworn solo si tenés JD en la mano y le falta ese nombre para los 4 (mandó un Garoth y una Celestia porque sí).
+- **Wulf nunca con las 5 zonas de monstruo ocupadas:** no tiene dónde invocarse.
 5. El nombre que falta, si y solo si tenés JD en la mano, es el 4º nombre y JD baja ese turno (sin Bottomless / Torrential posibles, sin Oppression, deck suficiente).
 - Si no hay plan, no se usa.
 
@@ -247,7 +256,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 
 **Rompen primero la backrow boca abajo del rival** (también Ryko cuando lo dan vuelta atacándolo), después las cartas continuas y después los monstruos por amenaza (los tokens al final).
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
-- **Ryko contra Stardust o Tytannial con Plantas para tributar:** no destruye nada (lo negarían) y solo muele. Vale tanto si lo da vuelta el ataque del rival como si lo da vuelta el bot (antes, en el flip propio, apuntaba a Stardust). Depende de que el juego deje elegir cero objetivos; si obliga a elegir, destruye como siempre.
+- **Ryko contra Stardust o Tytannial con Plantas para tributar:** el bot no lo da vuelta. Si lo da vuelta el ataque del rival, intenta no destruir nada, pero el juego obliga a elegir un objetivo (confirmado 2026-10-30), así que destruye como siempre.
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
 - **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
@@ -316,7 +325,7 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 **Solo dos momentos:**
 - **Cuando el rival entra en batalla** (o declara un ataque) con un monstruo en ataque.
-- **Si la van a destruir** (Heavy Storm, MST, Icarus), siempre, aunque no haya atacantes.
+- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse.
 
 Una por turno (encadenó dos seguidas). Se setea una sola copia por vez. Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
 

@@ -82,9 +82,35 @@ namespace BotTest.Game.AI.Brains
 
         protected bool TrapsStunned => _trapStunTurn == CurrentHeader.CurrentTurn;
 
+        // Their Threatening Roar on our turn: no attacks left this turn. Seen as a new copy in their GY.
+        private int _enemyRoarTurn = -1;
+        private int _enemyRoarSeenCount = -1;
+
+        private void UpdateEnemyRoar()
+        {
+            var grave = CurrentField.EnemySide.Grave;
+            if (grave == null)
+                return;
+            int used = grave.Count(id => CardIdentity.Same(id, ThreateningRoar));
+            bool newCopy = _enemyRoarSeenCount >= 0 && used > _enemyRoarSeenCount;
+            _enemyRoarSeenCount = used;
+            if (newCopy && IsBotTurn && _enemyRoarTurn != CurrentHeader.CurrentTurn)
+            {
+                _enemyRoarTurn = CurrentHeader.CurrentTurn;
+                Log("Their Threatening Roar resolved: no attacks this turn");
+            }
+        }
+
+        protected bool AttacksLockedByRoar => _enemyRoarTurn == CurrentHeader.CurrentTurn;
+
+        // Honest seen in their hand and not shown in public since (their copies left by the banlist count).
+        protected bool HonestKnownInTheirHand => StillInRevealedHand(Honest) &&
+            CardCounter.OpponentCopiesLeft(Honest, CurrentField.EnemySide.Grave, CurrentField.EnemySide.Banish, Array.Empty<int>()) > 0;
+
         private async Task SnapshotOwnMonstersAsync()
         {
             UpdateTrapStun(await GetEnemySpellCardsAsync());
+            UpdateEnemyRoar();
             var keys = (await GetBotMonsterCardsAsync()).Select(ZoneKey).ToHashSet();
             var idsOnField = keys.Select(key => int.Parse(key.Split('@')[0])).ToHashSet();
             foreach (var gone in _vayuSummoned.Where(x => x.Value != CurrentHeader.CurrentTurn && !idsOnField.Contains(x.Key)).Select(x => x.Key).ToList())
@@ -776,7 +802,8 @@ namespace BotTest.Game.AI.Brains
 
             var enemies = board.EnemyMonsters;
             var faceUp = enemies.Where(card => card.IsFaceup()).ToList();
-            bool canAttackThisTurn = IsBotTurn && board.IsMain1;
+            // Javier: Goyo came down after their Roar had closed the battle and stole nothing.
+            bool canAttackThisTurn = IsBotTurn && board.IsMain1 && !AttacksLockedByRoar;
 
             switch (cardId)
             {
@@ -838,6 +865,9 @@ namespace BotTest.Game.AI.Brains
                     // Gains 600 LP every End Phase: a real option when our life is low.
                     if (CurrentField.OwnSide.LifePoints <= 4000)
                         score += 30;
+                    // Javier: it's LIGHT, so with Honest in hand it carries Honest into their threats.
+                    if (board.Hand.Any(card => card.IsCode(Honest)))
+                        score += 20;
                     break;
 
                 case BrionacDragonOfTheIceBarrier:
@@ -1204,6 +1234,7 @@ namespace BotTest.Game.AI.Brains
 
             // Monsters that steal what they destroy (Goyo) go first, into the best monster worth taking.
             var enemyMonsters = await GetEnemyMonsterCardsAsync();
+            bool honestKnown = HonestKnownInTheirHand;
             for (int index = 0; index < attackers.Length; index++)
             {
                 var thief = attackers[index];
@@ -1213,6 +1244,8 @@ namespace BotTest.Game.AI.Brains
                 var target = enemyMonsters
                     .Where(card => card.IsFaceup() && (card.Type & TokenType) == 0 && card.GetRealPower() < thief.Attack)
                     .Where(card => !card.IsCode(PunishesBattleDestruction))
+                    // Javier: Goyo attacked a Celestia with Honest already revealed in their hand.
+                    .Where(card => !(honestKnown && (card.Attribute & LightAttribute) != 0))
                     .OrderByDescending(ThreatScore)
                     .FirstOrDefault();
                 if (target.ID > 0 && ThreatScore(target) >= 1000)

@@ -49,6 +49,10 @@ Cada entrada tiene:
 - **Qué pasa:** solo trae `LFListHash`.
 - **Consecuencia:** el mapeo hash → lista está en `BotTest/Banlists/rooms.json` (`4064611988` = edison, que también es el default). Si cambia el formato, agregá el hash ahí.
 
+### #6. El efecto de Ryko obliga a elegir un objetivo
+- **Qué pasa:** cuando Ryko se da vuelta, el `SelectCard` del objetivo llega con `Minimum = 1`; no se puede devolver una lista vacía para "solo moler" (2026-10-30, contra Tytannial con una ficha Planta).
+- **Consecuencia:** contra Stardust o Tytannial con Plantas para tributar, el efecto se niega y Ryko muere. La única defensa es no darlo vuelta nosotros (`DecideMainPhase`); si lo da vuelta un ataque rival, destruye lo que pueda.
+
 ---
 
 ## 2. Convenciones de la API (verificadas, fáciles de confundir)

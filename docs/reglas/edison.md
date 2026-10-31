@@ -61,6 +61,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 
 **Elige el synchro según el campo.** El orden del mazo solo desempata:
 - **Goyo:** si hay algo que le gane en batalla y valga robar (no tokens). Contra una Tytannial de 2800 o menos también: no la roba, pero choca con ella.
+- **Si el rival ya activó Threatening Roar en nuestro turno**, ningún synchro cuenta con atacar (Goyo bajó después del Roar y no robó nada).
 - Brionac no suma contra una Tytannial boca arriba (niega el rebote).
 - **Armed Wing:** si hay monstruos en defensa que le gane con piercing.
 - **Armor Master:** contra un monstruo de 2800 o más que no podemos pasar.
@@ -69,7 +70,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 - **Red Dragon Archfiend:** con 2 o más monstruos rivales en defensa.
 - **Catastor:** contra un no-DARK de 2200 o más.
 - **Black Rose:** solo si vamos claramente atrás (el rival tiene 2 cartas más que nosotros en el campo) y no hay Stardust que la niegue. Si no, nunca.
-- **Magical Android:** con 4000 de vida o menos.
+- **Magical Android:** con 4000 de vida o menos. También suma si tenemos Honest en la mano: es LIGHT y lo lleva contra sus amenazas.
 - **Brionac:** contra algo difícil de sacar, pagando con una carta que no necesitamos. También cuando lo único que estorba es el backrow seteado del rival (sus monstruos tienen menos de 1900), antes que un Goyo que se come la trampa.
 - **Stardust:** contra 2 o más cartas seteadas.
 
@@ -121,7 +122,7 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
    - Solo si no hay otros atacantes esperando detrás: si los hay, ataca igual, porque quedarse frena a todos.
 4. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
 5. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
-6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress).
+6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress). **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
 7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:
@@ -375,7 +376,7 @@ Código: `ShouldUseRoyalOppression`, `SpecialSummonUnderway`, `TrySynchroSummon`
 - No la frena el Stardust.
 
 **Qué monstruo se lleva (de la mano revelada del rival), por puntaje:**
-- Primero las manos trampa que castigan los ataques: Gorz (4000, y +2000 más si tenemos monstruos en ataque), Tragoedia (3500), Kalut espejo (2500).
+- Primero las manos trampa que castigan los ataques: Gorz (4000, y +2000 más si tenemos monstruos en ataque), Tragoedia (3500), Honest (3000), Kalut espejo (2500). Se llevó una Lyla en vez de Honest, y con Honest el rival tuvo lethal.
 - Después los que arrancan combos: Stratos (2700), Machina Force (2700), Lonefire Blossom (2600), Quickdraw Synchron, Judgment Dragon, Dark Armed Dragon (2500), Debris Dragon, Machina Gearframe (2000), Caius, Raiza, Thestalos (1800), Card Trooper, Plaguespreader Zombie, Shura, Gale (1500), Bora (1000), Plasma (1000, más 2500 si ya tienen 3 monstruos para tributar).
 - Más el bonus de amenaza, más ATK/10, más 300 si es de nivel 4 o menos (invocable ya).
 - Ajustes: Debris Dragon pierde todo su valor si su GY está vacío (carta muerta). Con el GY vacío, los que buscan del mazo (Gearframe, Stratos) suben 1500. Machina Force baja 1500 si no hay Machina Fortress en su GY. Lightsworn Wulf nunca, salvo que sea el único: en la mano es una carta muerta y de vuelta en el mazo se vuelve viva.

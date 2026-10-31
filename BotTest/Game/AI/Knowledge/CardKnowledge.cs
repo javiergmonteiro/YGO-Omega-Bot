@@ -10,6 +10,7 @@ namespace BotTest.Game.AI.Knowledge
         public const int TokenType = 0x4000;
         public const int TunerType = 0x1000;
         public const int DarkAttribute = 0x20;
+        public const int LightAttribute = 0x10;
 
         // Generic Edison staples the shared rules reason about.
         public const int StardustDragon = 44508094;
@@ -21,6 +22,10 @@ namespace BotTest.Game.AI.Knowledge
         // Gains 300 ATK in the Damage Step when it attacks a monster (attack math counts it).
         public const int LightswornPaladinJain = 96235295;
         public const int BlackRoseDragon = 73580471;
+        // Wins any battle for a LIGHT monster: seen in their hand, our thief doesn't attack their LIGHT.
+        public const int Honest = 37742478;
+        // Their Roar closes our attacks for the turn: synchros that only pay off by attacking lose their bonus.
+        public const int ThreateningRoar = 36361633;
         public const int BlackwingArmorMaster = 69031175;
 
         // Generic Edison Extra Deck: picked by situation, not by a fixed list (see EdisonBotBrain.ScoreSynchro).
@@ -176,6 +181,7 @@ namespace BotTest.Game.AI.Knowledge
             // Hand traps against our attacks
             [44330098] = 4000,  // Gorz the Emissary of Darkness
             [98777036] = 3500,  // Tragoedia
+            [Honest] = 3000,    // Honest (any battle with their LIGHT goes their way; left in hand it gave them lethal)
             [85215458] = 2500,  // Blackwing - Kalut the Moon Shadow (mirror)
             // Combo starters
             [20932152] = 2500,  // Quickdraw Synchron

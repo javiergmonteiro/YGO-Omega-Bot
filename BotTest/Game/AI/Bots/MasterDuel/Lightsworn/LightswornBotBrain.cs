@@ -336,6 +336,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             int lifePoints = CurrentField.OwnSide.LifePoints;
             if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board))
                 return false;
+            // Javier (mirror, he won this way): a LIGHT attack with Honest already kills; the wipe would send their set
+            // monster (a Necro Gardna?) to the GY, where it negates the attack. Only with no backrow the wipe should clear.
+            if (HonestLethalWithoutWipe(board))
+            {
+                LogOnChange("Judgment Dragon keeps the wipe: an attack with Honest already kills");
+                return false;
+            }
 
             // Javier: Gorz answered our attack: in Main 2 the wipe goes (again) and clears Gorz and its token, whatever
             // it costs us (the 3000 DEF token walled two Judgment Dragons for two turns, 2026-10-27). Only when nothing
@@ -361,6 +368,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
             return true;
         }
+
+        // Honest makes our LIGHT win against a face-up attacker and deal its own ATK: enough for their LP.
+        private bool HonestLethalWithoutWipe(Board board) =>
+            IsBotTurn && board.IsMain1 && InHand(board.Hand, Honest) && !board.EnemySpells.Any(card => !card.IsFaceup()) &&
+            board.EnemyMonsters.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsAttack()) &&
+            board.OwnMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked && (card.Attribute & LightAttribute) != 0 &&
+                card.Attack >= CurrentField.EnemySide.LifePoints);
 
         // A second Judgment Dragon in hand that can follow the first one this Main 1 (4+ names in the GY).
         private bool SecondJudgmentReady(Board board) =>
@@ -438,9 +452,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Ryko set last turn: flip it first thing, breaking their backrow, before anything else (Javier).
             // Not into Plasma, and not when they have no card (it would hit ours). Into Tytannial yes: she has to spend
-            // a Plant (herself when alone) to negate it, one by one (Javier).
+            // a Plant (herself when alone) to negate it, one by one (Javier). Not into Stardust or a Tytannial with other
+            // Plants: the game makes Ryko pick a target, so it gets negated and dies for a token (2026-10-30).
             if (IsBotTurn && board.IsMain1 && TryGetReposable(state, Ryko, out var ryko) && !ryko.IsFaceup() && CanMill(3, board) &&
-                board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && !PlasmaNegates(board))
+                board.EnemyMonsters.Count + board.EnemySpells.Count > 0 && !PlasmaNegates(board) &&
+                !board.StardustBlocking && !board.TargetingBlocked)
             {
                 Log("Flip summoning Ryko");
                 _rykoFlipped = true;
@@ -606,16 +622,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 }
             }
 
-            // Solar Recharge: draw 2, mill 2. Needs a Lightsworn to discard (never Lumina unless it's the only one).
-            if (CanMill(4, board) && MillKeepsCaution(2, board) && hand.Any(card => card.IsCode(LightswornMonsters)) &&
+            // Solar Recharge: draw 2, mill 2. Needs a Lightsworn to discard that isn't Lumina or Jain (Javier: Lumina is
+            // never discarded, Jain can be a hold).
+            if (CanMill(4, board) && MillKeepsCaution(2, board) && hand.Any(card => card.IsCode(LightswornMonsters) && !card.IsCode(Lumina, Jain)) &&
                 TryActivate(state, SolarRecharge, false, out var solar))
             {
                 _pendingEffect = SolarRecharge;
                 return solar;
             }
 
-            // Charge of the Light Brigade: mill 3, search a Lightsworn.
-            if (CanMill(4, board) && TryActivate(state, ChargeOfTheLightBrigade, false, out var charge))
+            // Charge of the Light Brigade: mill 3, search a Lightsworn. Javier: only one copy, so only for a card that
+            // answers their field now (or a name Judgment Dragon in hand is missing). Going first it waits.
+            bool chargeFirstTurn = IsBotTurn && CurrentHeader.CurrentTurn == 1;
+            bool chargeWorthIt = ChargeAnswers(board).Count > 0 || (InHand(hand, JudgmentDragon) && GraveNames() < 4);
+            if (CanMill(4, board) && !chargeFirstTurn && chargeWorthIt && TryActivate(state, ChargeOfTheLightBrigade, false, out var charge))
             {
                 _pendingEffect = ChargeOfTheLightBrigade;
                 return charge;
@@ -1087,12 +1107,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool battle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep;
                 var enemyMonsters = await GetEnemyMonsterCardsAsync();
                 bool threat = enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsAttack() && monster.Attack > 0);
-                // Javier: only two moments. When it's about to be destroyed (Heavy Storm, MST, Icarus) it goes no matter
-                // what; otherwise when they enter the Battle Phase with an attacker up. Not on their Main 1 plays.
+                // Javier: only two moments. When it's about to be destroyed (Heavy Storm, MST, Icarus, Black Rose's wipe)
+                // it goes no matter what; otherwise when they enter the Battle Phase with an attacker up. Not on their
+                // Main 1 plays.
                 var enemySpells = await GetEnemySpellCardsAsync();
                 bool theirChain = CurrentHeader.LastChainPlayer == ChainTracker.Opponent;
-                bool destroyed = theirChain && enemySpells.Any(spell => spell.IsFaceup() &&
-                    spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack));
+                bool destroyed = theirChain && (enemySpells.Any(spell => spell.IsFaceup() &&
+                    spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack)) ||
+                    enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsCode(CardKnowledge.BlackRoseDragon)));
                 bool use = destroyed || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
                 if (use)
                 {
@@ -1491,17 +1513,17 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         }
 
         // Solar Recharge: Wulf first, then the Lightsworn repeated in hand (one whose name isn't in the GY yet adds a name),
-        // then the ones missing from the GY. Never Lumina unless it's the only one.
+        // then the ones missing from the GY. Jain and Lumina last (Javier: Jain can be a hold, Lumina is never discarded).
         private int[] SolarDiscardOrder(List<DynamicCard> hand)
         {
-            var inHand = LightswornMonsters.Where(id => id != Wulf && id != Lumina && InHand(hand, id)).ToList();
+            var inHand = LightswornMonsters.Where(id => id != Wulf && id != Lumina && id != Jain && InHand(hand, id)).ToList();
             int CopiesInHand(int id) => hand.Count(card => card.IsCode(id));
             return new[] { Wulf }
                 .Concat(inHand.Where(id => CopiesInHand(id) >= 2 && GraveCopies(id) == 0))
                 .Concat(inHand.Where(id => GraveCopies(id) == 0))
                 .Concat(inHand.Where(id => CopiesInHand(id) >= 2))
                 .Concat(inHand.OrderByDescending(GraveCopies))
-                .Concat(new[] { Lumina })
+                .Concat(new[] { Jain, Lumina })
                 .ToArray();
         }
 
@@ -1520,20 +1542,34 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 .ToArray();
         }
 
-        // Charge: Lumina when there's something to revive (it can bring Lyla back too, Javier), Lyla against their backrow,
-        // else a name the GY is missing.
+        // Javier: Charge brings what answers their field now: Lyla to clear their backrow, Jain to attack, Lumina for a
+        // body and mill (or something to revive), Ehren against a face-down monster. Ryko only for the Tytannial plan.
+        private List<int> ChargeAnswers(Board board)
+        {
+            var answers = new List<int>();
+            if (TytannialPlan(board))
+                answers.Add(Ryko);
+            if (LylaCanBreak(board))
+                answers.Add(Lyla);
+            // Jain (2100, 2400 attacking) beats one of theirs or attacks directly.
+            if (IsBotTurn && board.IsMain1 && (board.EnemyMonsters.Count == 0 ||
+                    board.EnemyMonsters.Any(card => card.IsFaceup() && card.GetRealPower() < 2400)))
+                answers.Add(Jain);
+            if (board.OwnMonsters.Count == 0 || OwnGrave.Any(id => new[] { Jain, Wulf, Garoth, Lyla, Ehren, Druid }.Any(t => CardIdentity.Same(id, t))))
+                answers.Add(Lumina);
+            if (board.EnemyMonsters.Any(card => !card.IsFaceup()))
+                answers.Add(Ehren);
+            return answers.Where(id => !InHand(board.Hand, id)).ToList();
+        }
+
+        // Charge's search: the answers first, then a name Judgment Dragon in hand is missing; Garoth and Druid only with
+        // nothing else (Javier: Druid is too situational).
         private int[] ChargeSearchOrder(Board board)
         {
-            var order = new List<int>();
-            if (TytannialPlan(board) && !InHand(board.Hand, Ryko))
-                order.Add(Ryko);
-            if (OwnGrave.Any(id => new[] { Jain, Wulf, Garoth, Lyla, Ehren, Druid }.Any(t => CardIdentity.Same(id, t))))
-                order.Add(Lumina);
-            if (HasBackrow(board))
-                order.Add(Lyla);
-            order.AddRange(new[] { Jain, Garoth, Ehren, Lyla, Druid, Ryko, Lumina }
-                .Where(id => GraveCopies(id) == 0 && !InHand(board.Hand, id)));
-            order.AddRange(new[] { Lyla, Jain, Ryko, Lumina, Garoth, Ehren, Druid, Wulf });
+            var order = ChargeAnswers(board);
+            if (InHand(board.Hand, JudgmentDragon))
+                order.AddRange(new[] { Jain, Lyla, Ehren, Lumina, Garoth, Druid }.Where(id => GraveCopies(id) == 0 && !InHand(board.Hand, id)));
+            order.AddRange(new[] { Garoth, Druid, Lyla, Jain, Lumina, Ehren, Ryko, Wulf });
             return order.ToArray();
         }
 
@@ -1613,6 +1649,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 order.AddRange(LightswornMonsters.Where(id => GraveCopies(id) == 0 && id != Wulf));
             order.AddRange(new[] { Wulf, Plaguespreader, NecroGardna });
             order.AddRange(LightswornMonsters);
+            // Javier: with our 5 monster zones taken, Wulf can't summon itself.
+            if (board.OwnMonsters.Count >= 5)
+                order.RemoveAll(id => id == Wulf);
             return order.ToArray();
         }
 
