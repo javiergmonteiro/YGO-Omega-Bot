@@ -1801,7 +1801,9 @@ namespace BotTest.Game.AI.Brains
                 // hold cards (Javier).
                 MirrorForce => attacker.HasValue && !LoneCardTrooper(attacker.Value, enemyMonsters, lifePoints) &&
                     !(IsProtectedByUnion(attacker.Value, enemySpells) && enemyMonsters.Count(m => m.IsAttack()) == 1) &&
+                    // Drill Warrior halved to 1200 for a direct attack is still a 2400 synchro that keeps coming back (Javier).
                     (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints ||
+                     CardIdentity.NameOf(attacker.Value.ID) == "Drill Warrior" ||
                      ((attacker.Value.IsCode(SpiritReaper) || CardIdentity.NameOf(attacker.Value.ID) == "X-Saber Airbellum") &&
                       !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||

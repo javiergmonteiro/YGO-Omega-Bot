@@ -315,6 +315,7 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 **Se activa contra un ataque si:** hay atacante y se cumple una de estas tres: el rival tiene 2 o más monstruos en posición de ataque, o el atacante tiene 1800 ATK o más, o el ataque es letal.
 - Bloqueada con Stardust activo salvo lethal/Oppression/Crow. Un Mirror Force es de destrucción.
 - **Excepción: cuando el que ataca es la propia Stardust, se activa si el golpe duele** (lo que ataca este turno te deja en 4000 o menos). Si Stardust la niega, se tributa y su ataque se cae. Una Stardust sola contra 8000 LP no vale el Mirror Force: vuelve en la End Phase (2026-11-01).
+- **Contra Drill Warrior siempre**, aunque ataque con el ATK a la mitad (1200): es un synchro de 2400 que se destierra y vuelve.
 - **Contra un Spirit Reaper o un X-Saber Airbellum que ataca directo, si tenés cartas en la mano:** su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
 - No se encadena un segundo si ya respondimos la cadena.
 - **No contra un Card Trooper solo:** si el único monstruo del rival en ataque es Card Trooper (y no es letal), no se activa. Al destruirse le roba una carta, así que es un +1 para él.
