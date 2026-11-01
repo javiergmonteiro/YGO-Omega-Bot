@@ -56,7 +56,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 
 **Espera a la Main 2 para que los materiales ataquen primero.**
 - Cuándo: es nuestra Main 1 con batalla disponible, el rival no tiene cartas seteadas, y nuestro atacante más débil le gana a cada monstruo suyo.
-- **Si el rival no tiene monstruos:** los materiales pegan directo primero, siempre que juntos peguen al menos lo mismo que el synchro más fuerte disponible. El synchro sale en Main 2.
+- **Si el rival no tiene monstruos: siempre.** Los materiales pegan directo primero aunque tenga cartas seteadas y aunque se pierda daño; el synchro sale en Main 2 (Armor Master en Main 1 se comió una Dimensional Prison, 2026-11-01).
 - **Contra Cyber Valley boca arriba, nunca espera:** atacarla termina la Battle Phase, así que el synchro va primero.
 
 **Elige el synchro según el campo.** El orden del mazo solo desempata:
@@ -133,6 +133,7 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
     - **Si hay uno boca abajo en defensa:** le pega con el más fuerte.
     - **Si no,** termina la batalla.
     - Si el rival no tiene monstruos, ataca directo con el más fuerte.
+- **Nunca contra un Spirit Reaper boca arriba en defensa:** no se destruye en batalla y no hay daño, el ataque no sirve (le pegó 3 turnos seguidos mientras se quedaba sin deck). Tampoco los que no se destruyen ni reciben daño.
 - **Jain (Lightsworn Paladin) cuenta con +300 al atacar a un monstruo** (su efecto en el damage step): 1800 contra 1800 gana.
 
 `Código: DecideBattleCmdCoreAsync, DecideGenericAttackAsync, GetAttackScore`
@@ -146,7 +147,7 @@ Antes de mirar la ficha de cada carta, el bot aplica estos filtros en orden:
    - "Destrucción" incluye Mirror Force, Icarus, Heavy Storm, MST, Bottomless, Solemn y Royal Oppression (además de DAD y Black Rose). Prison, Book of Moon, Brain Control, Starlight Road y Dustshoot se usan igual.
    - Se levanta si tenemos Royal Oppression en el campo (con más de 800 de vida) o D.D. Crow en la mano.
    - ⚠ Solemn figura como destrucción aunque negar no destruye: con Stardust activo no niega invocaciones ni efectos.
-   - Excepciones: el ataque letal, Solemn negando un Heavy Storm (negar no destruye), y **Mirror Force contra el ataque de la propia Stardust** (para negarla, Stardust se tributa y el ataque se cae).
+   - Excepciones: el ataque letal, Solemn negando un Heavy Storm (negar no destruye), y **Mirror Force contra el ataque de la propia Stardust cuando el golpe duele** (lo que ataca este turno te deja en 4000 o menos): para negarla, Stardust se tributa y el ataque se cae.
    - Cuando la guarda por Stardust o por Tytannial, ahora lo deja en el log.
 3. **Trap Stun resuelto este turno:** no activa más trampas.
 4. **Tytannial con una Planta para tributar:** no usa cartas que apuntan.
@@ -312,7 +313,8 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 
 **Se activa contra un ataque si:** hay atacante y se cumple una de estas tres: el rival tiene 2 o más monstruos en posición de ataque, o el atacante tiene 1800 ATK o más, o el ataque es letal.
 - Bloqueada con Stardust activo salvo lethal/Oppression/Crow. Un Mirror Force es de destrucción.
-- **Excepción: cuando el que ataca es la propia Stardust, se activa.** Si Stardust la niega, se tributa y su ataque se cae.
+- **Excepción: cuando el que ataca es la propia Stardust, se activa si el golpe duele** (lo que ataca este turno te deja en 4000 o menos). Si Stardust la niega, se tributa y su ataque se cae. Una Stardust sola contra 8000 LP no vale el Mirror Force: vuelve en la End Phase (2026-11-01).
+- **Contra un Spirit Reaper que ataca directo, si tenés cartas en la mano:** su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
 - No se encadena un segundo si ya respondimos la cadena.
 - **No contra un Card Trooper solo:** si el único monstruo del rival en ataque es Card Trooper (y no es letal), no se activa. Al destruirse le roba una carta, así que es un +1 para él.
 - **No contra un monstruo con una unión equipada** (Gearframe en Machina Fortress) si es su único monstruo en ataque: solo muere la unión y el ataque sigue.

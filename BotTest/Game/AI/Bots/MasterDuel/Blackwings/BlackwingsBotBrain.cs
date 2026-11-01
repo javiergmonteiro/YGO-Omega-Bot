@@ -192,6 +192,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
 
                 if (TryGetSpecialSummon(state, cardId, out var card) && card.CurrentCoordinates.Location == (byte)CardLocation.Hand)
                 {
+                    if (cardId == GaleTheWhirlwind && !GaleHasJob(board))
+                    {
+                        LogOnChange("Gale stays in hand: nothing of theirs worth halving");
+                        continue;
+                    }
                     if (ShouldAvoidOverextending(board, card))
                         continue;
                     if (OppressionStopsOurSpecialSummons(board))
@@ -468,6 +473,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
             return null;
         }
 
+        // Javier (2026-11-01): Gale is kept in hand until it has something to answer: a face-up monster of theirs that
+        // Shura's 1800 doesn't beat. Not into an empty field (the synchro walked into Dimensional Prison) nor to turn a
+        // Goblin Zombie into a Dark End Dragon. A stolen monster still goes into a synchro with it.
+        private bool GaleHasJob(Board board) => board.ControlsStolenMonster ||
+            board.EnemyMonsters.Any(card => card.IsFaceup() && (card.Type & CardKnowledge.TokenType) == 0 && card.GetRealPower() >= 1800);
+
         // Gale halves ATK *and* DEF (the DEF cut matters too, e.g. so Bora can break or pierce a defender).
         // Tokens count like anything else; only a 0 ATK / 0 DEF body is a waste.
         private static bool IsWorthHalving(DynamicCard card) =>
@@ -478,6 +489,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Blackwings
         // or banished, it's still in the deck.
         private DynamicCard? FindGaleSynchroSummon(IdleCmdData state, Board board, bool whirlwindUp)
         {
+            if (!GaleHasJob(board))
+                return null;
             bool galeInHand = board.Hand.Any(card => card.IsCode(GaleTheWhirlwind));
             bool galeGone = board.Graveyard.Any(card => card.IsCode(GaleTheWhirlwind)) ||
                 board.OwnMonsters.Any(card => card.IsCode(GaleTheWhirlwind)) ||

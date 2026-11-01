@@ -713,22 +713,26 @@ namespace BotTest.Game.AI.Brains
         // dealt nothing and left a token; Bora piercing + Gale on the tokens first was 1700 and a clean field).
         protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board, List<DynamicCard> synchroOptions)
         {
-            if (!IsBotTurn || !board.IsMain1 || !state.CanBattlePhase || board.EnemySpells.Any(card => !card.IsFaceup()))
+            if (!IsBotTurn || !board.IsMain1 || !state.CanBattlePhase)
                 return false;
 
             var attackers = board.OwnMonsters.Where(card => card.IsFaceup() && card.IsAttack() && !card.Attacked).ToList();
             if (attackers.Count == 0)
                 return false;
 
+            // Empty field: the materials always attack first and the synchro waits for Main Phase 2, even with a set card
+            // of theirs and even if it costs damage (Javier, 2026-11-01: Armor Master in Main 1 into a set card was
+            // banished by Dimensional Prison; keep the resources).
+            if (board.EnemyMonsters.Count == 0)
+                return true;
+
+            if (board.EnemySpells.Any(card => !card.IsFaceup()))
+                return false;
+
             // Cyber Valley ends the Battle Phase when attacked: the synchro comes first (2026-10-19: Gale attacked it
             // and Dark End came out in Main Phase 2 with no damage dealt).
             if (board.EnemyMonsters.Any(card => card.IsFaceup() && CardIdentity.NameOf(card.ID) == "Cyber Valley"))
                 return false;
-
-            // Empty field: the materials hit directly, as long as together they hit at least as hard as the synchro
-            // (Javier, 2026-10-19: synchro in Main Phase 1 into an empty field).
-            if (board.EnemyMonsters.Count == 0)
-                return attackers.Sum(card => card.Attack) >= synchroOptions.Select(card => card.Attack).DefaultIfEmpty(0).Max();
 
             var weakest = attackers.OrderBy(card => card.Attack).First();
             return board.EnemyMonsters.All(enemy => enemy.IsFaceup() && GetAttackScore(weakest, enemy) > 0);
@@ -1283,7 +1287,8 @@ namespace BotTest.Game.AI.Brains
                     continue;
 
                 // Not into Machina Fortress: destroying it in battle lets it destroy one of our cards (the attacker).
-                var target = GetPriorityEnemyMonster((await GetEnemyMonsterCardsAsync()).Where(card => !card.IsCode(PunishesBattleDestruction)));
+                var target = GetPriorityEnemyMonster((await GetEnemyMonsterCardsAsync()).Where(card => !card.IsCode(PunishesBattleDestruction) &&
+                    !(card.IsCode(SpiritReaper) && card.IsFaceup() && card.IsDefense())));
                 if (target.ID > 0 || target.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone)
                 {
                     Log($"{attacker.ID} attacks {target.ID}");
@@ -1545,8 +1550,11 @@ namespace BotTest.Game.AI.Brains
             // Solemn negating a spell destroys nothing, so Stardust can't stop it.
             // Mirror Force on Stardust's own attack still works: negating it tributes Stardust, so the attack is gone
             // (2026-10-21: Mirror Force stayed set while Stardust and Tytannial hit for 5300).
+            // Only when the hit hurts: a lone Stardust into 8000 LP isn't worth Mirror Force, it comes back in the End
+            // Phase (Javier, 2026-11-01). Worth it when what attacks this turn leaves us at 4000 or less.
+            int incomingDamage = enemyMonsters.Where(m => m.IsFaceup() && m.IsAttack()).Sum(m => m.Attack);
             bool stardustAttacking = !IsBotTurn && incoming.HasBattlingMonster && incoming.BattlingMonster.IsCode(StardustDragon) &&
-                !CurrentField.OwnSide.HasBattlingMonster;
+                !CurrentField.OwnSide.HasBattlingMonster && CurrentField.OwnSide.LifePoints - incomingDamage <= 4000;
             if (!lethalIncoming && IsStardustBlocking(enemyMonsters, ownSpells, hand) && card.IsCode(DestructionCards) &&
                 !(theirStormResolving && card.IsCode(SolemnJudgment)) && !(stardustAttacking && card.IsCode(MirrorForce)))
             {
@@ -1760,9 +1768,11 @@ namespace BotTest.Game.AI.Brains
                 // Not on a lone Card Trooper: it draws them a card when destroyed, a +1 for them (Javier).
                 // Not when the only attacker is a monster with a union equipped (Gearframe on Machina Fortress): only the
                 // union dies and the attack goes on (2026-10-29).
+                // Spirit Reaper hitting us directly makes us discard: Mirror Force kills it (no target) when we hold cards (Javier).
                 MirrorForce => attacker.HasValue && !LoneCardTrooper(attacker.Value, enemyMonsters, lifePoints) &&
                     !(IsProtectedByUnion(attacker.Value, enemySpells) && enemyMonsters.Count(m => m.IsAttack()) == 1) &&
-                    (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints),
+                    (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints ||
+                     (attacker.Value.IsCode(SpiritReaper) && !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),

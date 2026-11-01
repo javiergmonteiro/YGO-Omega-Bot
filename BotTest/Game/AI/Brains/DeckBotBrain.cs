@@ -430,6 +430,11 @@ namespace BotTest.Game.AI.Brains
             int attackerPower = attacker.Attack + (attacker.IsCode(Knowledge.CardKnowledge.LightswornPaladinJain) ? 300 : 0);
             int defenderPower = defender.GetRealPower();
 
+            // A face-up Spirit Reaper in defense survives the battle and takes no damage: attacking it does nothing
+            // (Javier, 2026-11-01: three turns of attacks into it while the deck ran out).
+            if (defender.IsFaceup() && defender.IsDefense() && defender.IsCode(Knowledge.CardKnowledge.SpiritReaper))
+                return 0;
+
             if (attackerPower <= defenderPower)
                 return 0;
 

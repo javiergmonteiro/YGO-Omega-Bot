@@ -65,6 +65,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private (int Turn, int Sequence, int LifePoints)? _gardnaAttack;
         private bool _rykoFlipped;
         private bool _stardustUp;
+        private bool _darkArmedUp;
 
         public LightswornBotBrain(
             ICardEvaluator? cardEvaluator = null,
@@ -131,8 +132,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Honest gives a LIGHT monster the ATK of the monster it battles: counted as a big pump for "can we beat it".
         protected override int BattleBoostInHand(List<DynamicCard> hand) => hand.Any(card => card.IsCode(Honest)) ? 2000 : 0;
 
-        // Javier: Honest is defensive first. We only attack counting on it into a face-up Stardust (Celestia's plan).
-        protected override bool CanBeBoosted(DynamicCard card) => (card.Attribute & LightAttribute) != 0 && _stardustUp;
+        // Javier: Honest is defensive first. We only attack counting on it into a face-up Stardust (Celestia's plan) or a
+        // Dark Armed Dragon (2026-11-01: "la prioridad es deshacerse del Dark Armed Dragon").
+        protected override bool CanBeBoosted(DynamicCard card) => (card.Attribute & LightAttribute) != 0 && (_stardustUp || _darkArmedUp);
 
         protected override int HandValue(DynamicCard card)
         {
@@ -314,11 +316,20 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Main 1 when it wipes (Javier: "lo bajó en M2 no M1": the wipe first, then JD attacks on a clear field);
             // otherwise Main 2, after the battle showed their backrow.
+            bool noBackrowMidGame = CurrentHeader.CurrentTurn > 2 && !board.EnemySpells.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Count > 0;
             if (board.IsMain1)
-                return wipe ? (3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : "its wipe clears their field, then it attacks") : null;
+            {
+                if (wipe)
+                    return 3000 >= CurrentField.EnemySide.LifePoints ? "its wipe and a direct hit win" : "its wipe clears their field, then it attacks";
+                // Their backrow is already gone (Heavy Storm, Lyla): JD comes down in Main 1 and attacks something it beats
+                // (Javier, 2026-11-01: "por qué no bajó en Main 1 JD y atacó si ya había eliminado la backrow").
+                if (noBackrowMidGame && board.EnemyMonsters.Any(card => card.GetRealPower() < 3000))
+                    return "mid-game, their backrow is gone: it attacks (Main 1)";
+                return null;
+            }
             if (wipe)
                 return "its wipe clears their field (Main 2)";
-            if (CurrentHeader.CurrentTurn > 2 && !board.EnemySpells.Any(card => !card.IsFaceup()) && board.EnemyMonsters.Count > 0)
+            if (noBackrowMidGame)
                 return "mid-game, no backrow (Main 2)";
             return null;
         }
@@ -433,6 +444,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             _avoidedTarget = await AvoidedMonsterEffectTargetsAsync(destroying: true);
             _stardustUp = board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(StardustDragon));
+            _darkArmedUp = board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(CardKnowledge.DarkArmedDragon));
             return DecideMainPhase(context, board);
         }
 
@@ -546,6 +558,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     LogOnChange($"Judgment Dragon waits: its End Phase mill would leave {DeckCount - 4} cards");
                 else if (JudgmentReason(board) == null && !lastResort)
                     LogOnChange("Judgment Dragon waits: no lethal, nothing to wipe, and not a mid-game turn into an empty backrow");
+                // Lyla first: she breaks their set card, then JD comes down (Javier, 2026-11-01: JD first ran into Bottomless).
+                else if (!lastResort && !OurLethal(board, 3000) && LylaCanBreak(board) && TryGetSummonable(state, Lyla, out _))
+                    LogOnChange("Judgment Dragon waits: Lyla breaks their backrow first");
                 else
                 {
                     Log($"Special summoning Judgment Dragon ({GraveNames()} names): {(lastResort ? "only play against their lethal" : JudgmentReason(board))}");
@@ -940,8 +955,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 return honest.NormalSummon();
             }
             int theirBestAttack = board.EnemyMonsters.Where(m => m.IsFaceup() && m.IsAttack()).Select(m => m.Attack).DefaultIfEmpty(0).Max();
+            // Not into a Dark Armed Dragon: Honest stays in hand to kill it with a LIGHT monster (2026-11-01: set, it was
+            // sent to the GY by Dark End and DAD hit us).
             if (ownMonsters.Count == 0 && (CurrentField.OwnSide.LifePoints < 3000 || (board.EnemyMonsters.Count > 0 && theirBestAttack < 1900)) &&
-                TryGetMonsterSettable(state, Honest, out var honestWall))
+                !_darkArmedUp && TryGetMonsterSettable(state, Honest, out var honestWall))
             {
                 Log("Setting Honest as a wall (its 1900 DEF holds, or below 3000 LP)");
                 return honestWall.SetMonster();
@@ -1268,7 +1285,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool lethal = theirs.IsAttack() && ours.Attack >= lifePoints && ours.Attack - theirs.Attack < lifePoints;
                 // Javier: Honest is defensive first. On our turn only for lethal or into Stardust; otherwise it waits
                 // for their attacks.
-                use = lethal || (turnsIt && theirs.IsCode(StardustDragon));
+                use = lethal || (turnsIt && theirs.IsCode(StardustDragon, CardKnowledge.DarkArmedDragon));
                 if (turnsIt && !lethal)
                     Log("Honest kept for their turn (defense first)");
             }
@@ -1431,6 +1448,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     .Where(x => !avoided(x.Card) || IsKiller(x.Card))
                     .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
                     .OrderByDescending(x => IsKiller(x.Card))
+                    // A Goyo takes whatever it destroys (Ryko flipped by its attack): it goes before their backrow (Javier, 2026-11-01).
+                    .ThenByDescending(x => x.Card.IsFaceup() && x.Card.IsCode(CardKnowledge.StealsOnBattle))
                     // Into a face-up Tytannial: she negates any target anyway, so aim at her (if she lets it through, she dies).
                     .ThenByDescending(x => x.Card.IsCode(CardKnowledge.TytannialPrincessOfCamellias) && x.Card.IsFaceup())
                     .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())

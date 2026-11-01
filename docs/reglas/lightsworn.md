@@ -117,7 +117,8 @@ Código: `DecideNormalSummon`
 - da lethal ese turno;
 - su efecto limpia el campo del rival (el rival tiene más cartas que vos, sin contar Ryko ni Card Trooper; 2000 LP o más);
 - mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
-- **Main 1 si gana o si limpia:** da lethal, o el efecto limpia el campo y después JD ataca. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
+- **Main 1 si gana o si limpia:** da lethal, o el efecto limpia el campo y después JD ataca. **También en Main 1 si su backrow ya no está** (la rompió Heavy Storm o Lyla) y JD le gana a alguno de sus monstruos: baja y ataca. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
+- **Lyla primero:** si Lyla se puede invocar y romper una carta seteada, JD espera a que Lyla la rompa (JD primero se comió un Bottomless). Salvo que JD dé lethal o contra su lethal.
 - **Con dos JD:** el primero baja en Main 1 y limpia (si el rival tiene 2 cartas o más que vos y tenés más de 1000 LP), el segundo baja después y atacan los dos. Sin setear nada antes.
 - Sin motivo, espera. Con Plasma boca arriba no se invoca.
 
@@ -258,6 +259,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 - **Ryko contra Stardust o Tytannial con Plantas para tributar:** el bot no lo da vuelta. Si lo da vuelta el ataque del rival, intenta no destruir nada, pero el juego obliga a elegir un objetivo (confirmado 2026-10-30), así que destruye como siempre.
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
+- **Goyo boca arriba va antes que la backrow** (por ejemplo, cuando Goyo ataca a Ryko: si no, se lo roba).
 - **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
 Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffectTargetsAsync`
@@ -302,7 +304,8 @@ Código: `DecideOwnEffectAsync`
 ### Honest
 
 **En el damage step:**
-- **Atacando, solo si da lethal o contra Stardust.** La prioridad es defensiva: Honest se guarda para el turno rival. El bot ya no ataca contando con Honest salvo contra Stardust (gastó un Honest con Lyla contra Neos Alius).
+- **Atacando, solo si da lethal o contra Stardust o Dark Armed Dragon.** La prioridad es defensiva: Honest se guarda para el turno rival. El bot ya no ataca contando con Honest salvo contra Stardust o DAD (gastó un Honest con Lyla contra Neos Alius; contra DAD, "la prioridad es deshacerse del Dark Armed").
+- **Con un DAD boca arriba no se setea como muro:** queda en la mano para matarlo con un LIGHT (seteado, Dark End lo mandó al cementerio y DAD pegó).
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
 - No contra una Machina Fortress con Gearframe equipado (se destruye el Gearframe y no se gana nada).
 - No contra Catastor boca arriba: su efecto destruye a tu LIGHT al inicio del damage step igual.

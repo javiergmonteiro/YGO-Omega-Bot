@@ -73,7 +73,7 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 - O bien "Kalut es la única jugada" (ver punto 10).
 - ⚠ Gale no cuenta como invocación que justifique el Whirlwind (aunque sí tiene la regla de Gale-synchro, punto 5, que cuenta el Whirlwind ya boca arriba). Si la única carta invocable es Gale, el Whirlwind no sube antes.
 
-**Regla del punto 5: invocación normal para synchro con Gale** (bajar al Blackwing que, con Gale, da un nivel de synchro disponible).
+**Regla del punto 5: invocación normal para synchro con Gale** (bajar al Blackwing que, con Gale, da un nivel de synchro disponible). Solo si Gale tiene un trabajo (ver Gale the Whirlwind).
 - Se prueba en este orden: Sirocco (solo sin monstruos propios), Shura, Bora.
 - Requisito: nivel del monstruo + 3 (Gale) debe ser un nivel de synchro que tenga el bot (5, 6, 7 u 8). Sirocco nivel 5 da 8; Shura/Bora nivel 4 dan 7.
 - Gale tiene que estar en mano; o, si hay un Black Whirlwind boca arriba, Gale todavía en el mazo (no está en cementerio, campo ni desterrada). En ese segundo caso el monstruo debe tener más de 1300 de ATK para disparar la búsqueda.
@@ -142,7 +142,8 @@ Si nada aplica, devuelve "nada": pasa a efectos de monstruo, sets y Battle.
 
 ### Gale the Whirlwind
 **Cuándo se juega**
-- Invocación especial desde la mano (si hay un Blackwing en campo), después de Bora.
+- Invocación especial desde la mano (si hay un Blackwing en campo), después de Bora, **solo si tiene un trabajo:** el rival tiene un monstruo boca arriba (no token) de 1800 o más, que Shura no le gana solo. Si no, **Gale se guarda en la mano** (Javier 2026-11-01: contra un campo vacío el synchro se comió una Prison; contra un Goblin Zombie no hacía falta un Dark End). Con un monstruo robado sí baja (es el material del synchro).
+- Lo mismo para la invocación normal del punto 5 (armar el synchro con Gale): sin trabajo para Gale, no se arma.
 - Es tuner nivel 3 (1300 ATK): se usa como base de los synchros 7 y 8 (con Shura/Bora, con Sirocco).
 - Su efecto (cortar ATK y DEF a la mitad) se usa en la Main Phase si hay un monstruo del rival boca arriba con ATK o DEF mayor que 0 ("vale la pena": un monstruo 0/0 no vale).
 - **Antes de ir a un synchro, usa el efecto.** Si no, Gale pasa a ser material con el efecto sin usar. Con el monstruo a la mitad, el puntaje del synchro puede cambiar (por ejemplo, un Goyo que ahora sí le gana).
