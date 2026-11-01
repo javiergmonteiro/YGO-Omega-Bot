@@ -515,7 +515,8 @@ namespace BotTest.Game.AI.Brains
             // (2026-10-21: Brain Control, Black Whirlwind and Sirocco stayed in hand with nothing logged).
             LogOnChange($"No rule played anything ({(DuelPhase)CurrentHeader.CurrentPhase}). Engine offered: activate [{DescribeIds(state.ActivableCards)}] " +
                 $"summon [{DescribeIds(state.SummonableCards)}] special [{DescribeIds(state.SpecialSummonableCards)}] " +
-                $"set monster [{DescribeIds(state.MonsterSetableCards)}] set spell [{DescribeIds(state.SpellSetableCards)}]" +
+                $"set monster [{DescribeIds(state.MonsterSetableCards)}] set spell [{DescribeIds(state.SpellSetableCards)}] " +
+                $"reposition [{DescribeIds(state.ReposableCards)}]" +
                 (holdBack ? " (holding back: lethal on board)" : ""));
             return await base.OnIdleCmdAsync(context with { StateData = filtered }, ct);
         }
@@ -724,7 +725,15 @@ namespace BotTest.Game.AI.Brains
             target.IsFaceup() && target.HasRace(CardRace.Psychic) && CurrentField.EnemySide.LifePoints > 1000 &&
             enemyMonsters.Any(card => card.IsFaceup() && card.IsCode(ThoughtRulerArchfiend) && !card.IsDisabled());
 
-        protected static bool FloatsOnDeath(int id) => CardIdentity.NameOf(id) is { } name && FloatsOnDeathNames.Contains(name);
+        // IDs too: an opponent card's name may not be looked up yet (2026-11-01: Goyo took a Pyramid Turtle anyway).
+        private static readonly int[] FloatsOnDeathIds = { 77044671, 63665875, 26202165, 9156135, 15341821, CardTrooper };
+
+        protected static bool FloatsOnDeath(int id) => FloatsOnDeathIds.Any(known => CardIdentity.Same(id, known)) ||
+            (CardIdentity.NameOf(id) is { } name && FloatsOnDeathNames.Contains(name));
+
+        // A direct hit from these makes us discard at random (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum).
+        protected static bool DiscardsOnDirectHit(DynamicCard card) => card.IsCode(SpiritReaper) ||
+            CardIdentity.NameOf(card.ID) is "Reaper on the Nightmare" or "X-Saber Airbellum";
 
         protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board, List<DynamicCard> synchroOptions)
         {
@@ -1804,7 +1813,7 @@ namespace BotTest.Game.AI.Brains
                     // Drill Warrior halved to 1200 for a direct attack is still a 2400 synchro that keeps coming back (Javier).
                     (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints ||
                      CardIdentity.NameOf(attacker.Value.ID) == "Drill Warrior" ||
-                     ((attacker.Value.IsCode(SpiritReaper) || CardIdentity.NameOf(attacker.Value.ID) == "X-Saber Airbellum") &&
+                     (DiscardsOnDirectHit(attacker.Value) &&
                       !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
@@ -2493,6 +2502,13 @@ namespace BotTest.Game.AI.Brains
                     (await GetOwnSpellCardsAsync()).Concat(await GetEnemySpellCardsAsync()).Any(card => card.IsCode(RoyalOppression) && card.IsFaceup()))
                 {
                     Log($"Effect yes/no: card {effectCard.ID} -> no (its special summon would be negated by Royal Oppression)");
+                    return false;
+                }
+                // Goyo's steal comes as a yes/no after the battle: not on a monster whose death effect fires anyway.
+                int lastInTheirGrave = (CurrentField.EnemySide.Grave ?? Array.Empty<int>()).LastOrDefault();
+                if (effectCard.IsCode(StealsOnBattle) && lastInTheirGrave != 0 && FloatsOnDeath(lastInTheirGrave))
+                {
+                    Log($"Effect yes/no: card {effectCard.ID} -> no (not stealing {lastInTheirGrave}: its effect when it dies fires anyway)");
                     return false;
                 }
             }

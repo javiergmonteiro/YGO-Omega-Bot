@@ -905,6 +905,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool hasJob = (cardId == Lyla && LylaCanBreak(board)) || (cardId == Ehren && enemyFaceDown) ||
                     (cardId == Lumina && CanUseMonsterEffect(Lumina, board, board.EnemyMonsters));
                 bool mills = card.IsCode(EndPhaseMillers);
+                // Javier (2026-11-01): Lumina with nothing in the GY to revive is just a 1000 body.
+                if (cardId == Lumina && !hasJob && !needBlocker)
+                {
+                    LogOnChange("Holding Lumina: nothing in the GY to revive");
+                    continue;
+                }
                 if (cardId == CardTrooper && DeckCount <= DeckCaution && !OurLethal(board))
                 {
                     if (TryGetMonsterSettable(state, CardTrooper, out var trooperSet))
@@ -1167,6 +1173,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         {
             var enemySide = CurrentField.EnemySide;
             var ownSide = CurrentField.OwnSide;
+            // Their Book of Life is banishing it from the GY: chain it now, it still negates their next attack (Javier, 2026-11-01).
+            if (!IsBotTurn && CurrentHeader.LastChainPlayer == ChainTracker.Opponent && !Chain.AnsweredCurrentChain(CurrentHeader) &&
+                (await GetEnemySpellCardsAsync()).Any(card => card.IsFaceup() && CardIdentity.NameOf(card.ID) == "Book of Life"))
+            {
+                Log("Necro Gardna in response to their Book of Life: it would be banished for nothing");
+                return true;
+            }
             if (IsBotTurn || !enemySide.HasBattlingMonster || Chain.AnsweredCurrentChain(CurrentHeader))
             {
                 LogOnChange("Necro Gardna waits for an attack declaration");
@@ -1204,8 +1217,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool kills = total >= ownSide.LifePoints;
                 bool savesUs = total - attack < ownSide.LifePoints;
                 bool biggerSaves = waiting.Any(other => other > attack && total - other < ownSide.LifePoints);
-                bool negate = attack >= ownSide.LifePoints || (kills && savesUs && !biggerSaves);
-                Log($"Necro Gardna on a direct attack of {attack} ({total} incoming): {(negate ? "yes, it would kill us" : kills && biggerSaves ? "no, a bigger one is coming" : "no, not lethal")}");
+                // Javier: a direct hit that makes us discard (Spirit Reaper) is worth Gardna when we hold cards and the
+                // attacks still to come don't kill us anyway.
+                bool discardSaved = DiscardsOnDirectHit(enemySide.BattlingMonster) && (ownSide.Hand ?? Array.Empty<int>()).Length > 0 && !kills;
+                bool negate = attack >= ownSide.LifePoints || (kills && savesUs && !biggerSaves) || discardSaved;
+                Log($"Necro Gardna on a direct attack of {attack} ({total} incoming): {(discardSaved ? "yes, its hit makes us discard" : negate ? "yes, it would kill us" : kills && biggerSaves ? "no, a bigger one is coming" : "no, not lethal")}");
                 return negate;
             }
 

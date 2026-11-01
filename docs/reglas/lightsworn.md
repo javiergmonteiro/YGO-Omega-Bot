@@ -81,6 +81,7 @@ Código: `GraveNames`
 ### Prioridad de invocación normal
 
 - Si Lyla puede romper una backrow, va antes que setear Ryko.
+- **Lumina no se invoca sin un objetivo para revivir** en el cementerio (salvo que haga falta un bloqueador).
 - **Contra un Spirit Reaper que no podés pasar, no se extiende:** si sus únicos monstruos son Spirit Reaper boca arriba en defensa y ya tenés un monstruo, no invoca más (ni Lumina revive). Ryko seteado sí. La mano se guarda para una jugada que lo saque: Brionac con Plaguespreader, Celestia, Judgment Dragon (2026-11-01: siguió bajando cartas y se quedó sin deck).
 - Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
 - Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
@@ -275,6 +276,8 @@ Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffec
 - **Ataques directos:** suma este ataque y los que les quedan. Si juntos te matan y negar este te salva, va. Pero si después viene uno más grande cuya negación también te salva, espera a ese. Un ataque que solo te mata también va. Se comió 1800 y 2400 y la usó en el tercero.
 - Si el juego reabre la ventana del mismo ataque después del daño (tus LP ya bajaron), no se usa: ya no hay nada que negar.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
+- **Contra un ataque directo que te hace descartar** (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum): se usa si tenés cartas en la mano y los ataques que quedan no te matan igual. Si te matan, se guarda para el letal.
+- **En respuesta a su Book of Life que lo destierra:** se encadena, así niega su próximo ataque en vez de perderse.
 
 **Como cuerpo seteado:** si no hay otra invocación y no tenés un Ryko de verdad en la mano, se setea aunque no vayas perdiendo: pasa por un Ryko y, si muere, desde el cementerio niega un ataque igual.
 
