@@ -727,6 +727,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             return spare >= 5;
         }
 
+        // Their only monsters are face-up Spirit Reapers in defense: no battle gets past them (Javier, 2026-11-01).
+        private static bool ReaperWall(Board board) => board.EnemyMonsters.Count > 0 &&
+            board.EnemyMonsters.All(card => card.IsFaceup() && card.IsDefense() && card.IsCode(CardKnowledge.SpiritReaper));
+
         private IdleCmdResponse? DecideLumina(IdleCmdData state, Board board)
         {
             if (!CanUseMonsterEffect(Lumina, board, board.EnemyMonsters))
@@ -735,6 +739,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             if (TytannialPlan(board) && board.OwnMonsters.Count > 1)
             {
                 LogOnChange("Lumina waits: Tytannial up, no more bodies on the field");
+                return null;
+            }
+            if (ReaperWall(board) && board.OwnMonsters.Count > 0)
+            {
+                LogOnChange("Lumina waits: Spirit Reaper walls us, no more bodies");
                 return null;
             }
             if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
@@ -859,6 +868,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             {
                 Log("Setting Ryko");
                 return ryko.SetMonster();
+            }
+
+            // Javier (2026-11-01): a Spirit Reaper we can't get past and we already have a monster: no more summons,
+            // the hand waits for a play that answers it (Brionac with Plaguespreader, Ryko, Celestia, Judgment Dragon).
+            if (ReaperWall(board) && ownMonsters.Count > 0 && !needBlocker)
+            {
+                LogOnChange("Spirit Reaper walls us: no more summons, the hand waits for a play");
+                return null;
             }
 
             var order = new List<int>();

@@ -71,7 +71,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 - **Catastor:** contra un no-DARK de 2200 o más.
 - **Black Rose:** solo si vamos claramente atrás (el rival tiene 2 cartas más que nosotros en el campo) y no hay Stardust que la niegue. Si no, nunca.
 - **Magical Android:** con 4000 de vida o menos. También suma si tenemos Honest en la mano: es LIGHT y lo lleva contra sus amenazas.
-- **Brionac:** contra algo difícil de sacar, pagando con una carta que no necesitamos. También cuando lo único que estorba es el backrow seteado del rival (sus monstruos tienen menos de 1900), antes que un Goyo que se come la trampa.
+- **Brionac:** contra algo difícil de sacar (también un Spirit Reaper: muere al ser objetivo), pagando con una carta que no necesitamos. También cuando lo único que estorba es el backrow seteado del rival (sus monstruos tienen menos de 1900), antes que un Goyo que se come la trampa.
 - **Stardust:** contra 2 o más cartas seteadas.
 
 **Materiales: entrega primero lo que menos sirve.**
@@ -314,7 +314,7 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 **Se activa contra un ataque si:** hay atacante y se cumple una de estas tres: el rival tiene 2 o más monstruos en posición de ataque, o el atacante tiene 1800 ATK o más, o el ataque es letal.
 - Bloqueada con Stardust activo salvo lethal/Oppression/Crow. Un Mirror Force es de destrucción.
 - **Excepción: cuando el que ataca es la propia Stardust, se activa si el golpe duele** (lo que ataca este turno te deja en 4000 o menos). Si Stardust la niega, se tributa y su ataque se cae. Una Stardust sola contra 8000 LP no vale el Mirror Force: vuelve en la End Phase (2026-11-01).
-- **Contra un Spirit Reaper que ataca directo, si tenés cartas en la mano:** su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
+- **Contra un Spirit Reaper o un X-Saber Airbellum que ataca directo, si tenés cartas en la mano:** su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
 - No se encadena un segundo si ya respondimos la cadena.
 - **No contra un Card Trooper solo:** si el único monstruo del rival en ataque es Card Trooper (y no es letal), no se activa. Al destruirse le roba una carta, así que es un +1 para él.
 - **No contra un monstruo con una unión equipada** (Gearframe en Machina Fortress) si es su único monstruo en ataque: solo muere la unión y el ataque sigue.

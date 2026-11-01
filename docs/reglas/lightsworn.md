@@ -81,6 +81,7 @@ Código: `GraveNames`
 ### Prioridad de invocación normal
 
 - Si Lyla puede romper una backrow, va antes que setear Ryko.
+- **Contra un Spirit Reaper que no podés pasar, no se extiende:** si sus únicos monstruos son Spirit Reaper boca arriba en defensa y ya tenés un monstruo, no invoca más (ni Lumina revive). Ryko seteado sí. La mano se guarda para una jugada que lo saque: Brionac con Plaguespreader, Celestia, Judgment Dragon (2026-11-01: siguió bajando cartas y se quedó sin deck).
 - Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
 - Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
 

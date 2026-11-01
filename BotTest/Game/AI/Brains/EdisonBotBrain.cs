@@ -876,7 +876,8 @@ namespace BotTest.Game.AI.Brains
 
                 case BrionacDragonOfTheIceBarrier:
                     // Bounce what we can't otherwise answer, paying with a card we don't need.
-                    bool hardThreat = faceUp.Any(card => card.IsCode(PunishesMonsterTargeting) || ThreatScore(card) >= 2500) ||
+                    // A Spirit Reaper dies to the target and no battle gets past it (Javier: Brionac is the answer).
+                    bool hardThreat = faceUp.Any(card => card.IsCode(PunishesMonsterTargeting) || ThreatScore(card) >= 2500 || card.IsCode(SpiritReaper)) ||
                         board.EnemySpells.Any(card => card.IsFaceup());
                     // Only their set backrow stands in the way (their monsters are small): bounce a set card rather than
                     // make a Goyo that walks into it (2026-10-17: Goyo over Brionac into a set Mirror Force).
@@ -1768,11 +1769,13 @@ namespace BotTest.Game.AI.Brains
                 // Not on a lone Card Trooper: it draws them a card when destroyed, a +1 for them (Javier).
                 // Not when the only attacker is a monster with a union equipped (Gearframe on Machina Fortress): only the
                 // union dies and the attack goes on (2026-10-29).
-                // Spirit Reaper hitting us directly makes us discard: Mirror Force kills it (no target) when we hold cards (Javier).
+                // Spirit Reaper (and X-Saber Airbellum) hitting us directly makes us discard: Mirror Force kills it when we
+                // hold cards (Javier).
                 MirrorForce => attacker.HasValue && !LoneCardTrooper(attacker.Value, enemyMonsters, lifePoints) &&
                     !(IsProtectedByUnion(attacker.Value, enemySpells) && enemyMonsters.Count(m => m.IsAttack()) == 1) &&
                     (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints ||
-                     (attacker.Value.IsCode(SpiritReaper) && !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
+                     ((attacker.Value.IsCode(SpiritReaper) || CardIdentity.NameOf(attacker.Value.ID) == "X-Saber Airbellum") &&
+                      !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),
