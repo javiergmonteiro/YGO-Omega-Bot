@@ -122,7 +122,7 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
    - Solo si no hay otros atacantes esperando detrás: si los hay, ataca igual, porque quedarse frena a todos.
 4. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
 5. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
-6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress). **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
+6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress). **No roba a los que al morir reclutan, buscan o roban** (Sangan, Pyramid Turtle, Apprentice Magician, XX-Saber Emmersblade, Goblin Zombie, Dandylion, Card Trooper): su efecto sale igual y nos queda un cuerpo débil. Tampoco cuentan para que valga la pena sacar a Goyo. **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
 7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:

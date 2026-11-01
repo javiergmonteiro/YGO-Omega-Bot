@@ -711,6 +711,15 @@ namespace BotTest.Game.AI.Brains
         // each one already wins: nothing set on their side (no Mirror Force / Torrential on the materials) and every
         // monster of theirs is beaten by our weakest attacker (2026-10-16: Armor Master in Main Phase 1
         // dealt nothing and left a token; Bora piercing + Gale on the tokens first was 1700 and a clean field).
+        // Monsters that recruit, search or draw when they die: their effect fires anyway, so Goyo taking one only gives
+        // us a weak body (Javier, 2026-11-01: "los que al morir reclutan o buscan, tampoco revivirlos con Goyo").
+        private static readonly HashSet<string> FloatsOnDeathNames = new()
+        {
+            "Sangan", "Pyramid Turtle", "Apprentice Magician", "XX-Saber Emmersblade", "Goblin Zombie", "Dandylion", "Card Trooper"
+        };
+
+        protected static bool FloatsOnDeath(int id) => CardIdentity.NameOf(id) is { } name && FloatsOnDeathNames.Contains(name);
+
         protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board, List<DynamicCard> synchroOptions)
         {
             if (!IsBotTurn || !board.IsMain1 || !state.CanBattlePhase)
@@ -813,7 +822,7 @@ namespace BotTest.Game.AI.Brains
             {
                 case GoyoGuardian:
                     // 2800: destroys it in battle and takes it. Worth it when there's something to steal.
-                    var stealable = enemies.Where(card => card.GetRealPower() < 2800 && (card.Type & TokenType) == 0).ToList();
+                    var stealable = enemies.Where(card => card.GetRealPower() < 2800 && (card.Type & TokenType) == 0 && !FloatsOnDeath(card.ID)).ToList();
                     if (canAttackThisTurn && stealable.Count > 0)
                         score += 60 + stealable.Max(ThreatScore) / 100;
                     // Javier: a 2800 Tytannial can't be stolen, but Goyo trades with her (her effect doesn't stop battle).
@@ -1248,7 +1257,7 @@ namespace BotTest.Game.AI.Brains
 
                 var target = enemyMonsters
                     .Where(card => card.IsFaceup() && (card.Type & TokenType) == 0 && card.GetRealPower() < thief.Attack)
-                    .Where(card => !card.IsCode(PunishesBattleDestruction))
+                    .Where(card => !card.IsCode(PunishesBattleDestruction) && !FloatsOnDeath(card.ID))
                     // Javier: Goyo attacked a Celestia with Honest already revealed in their hand.
                     .Where(card => !(honestKnown && (card.Attribute & LightAttribute) != 0))
                     .OrderByDescending(ThreatScore)
@@ -1614,6 +1623,11 @@ namespace BotTest.Game.AI.Brains
                     !await StolenFortressHasUseAsync())
                 {
                     Log($"Not stealing {lastInTheirGrave} with {card.ID}: it punishes being destroyed in battle");
+                    return false;
+                }
+                if (lastInTheirGrave != 0 && FloatsOnDeath(lastInTheirGrave))
+                {
+                    Log($"Not stealing {lastInTheirGrave} with {card.ID}: its effect when it dies fires anyway");
                     return false;
                 }
             }
