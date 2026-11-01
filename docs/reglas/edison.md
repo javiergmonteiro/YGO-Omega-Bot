@@ -149,6 +149,7 @@ Antes de mirar la ficha de cada carta, el bot aplica estos filtros en orden:
    - ⚠ Solemn figura como destrucción aunque negar no destruye: con Stardust activo no niega invocaciones ni efectos.
    - Excepciones: el ataque letal, Solemn negando un Heavy Storm (negar no destruye), y **Mirror Force contra el ataque de la propia Stardust cuando el golpe duele** (lo que ataca este turno te deja en 4000 o menos): para negarla, Stardust se tributa y el ataque se cae.
    - Cuando la guarda por Stardust o por Tytannial, ahora lo deja en el log.
+- **Thought Ruler Archfiend boca arriba:** ninguna magia o trampa nuestra apunta a un Psychic suyo (Thought Ruler incluido), porque paga 1000 y la niega y destruye. Brain Control no lo elige, Prison y Book of Moon no van contra un atacante Psychic (salvo ataque letal), e Icarus deja a los Psychic para el final. **Salvo que tenga 1000 de vida o menos** (no puede pagar).
 3. **Trap Stun resuelto este turno:** no activa más trampas.
 4. **Tytannial con una Planta para tributar:** no usa cartas que apuntan.
    - Las que además cuestan otra carta (tributo, descarte) tampoco con cualquier Tytannial activa.

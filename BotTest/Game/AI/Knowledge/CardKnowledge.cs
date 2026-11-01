@@ -21,6 +21,8 @@ namespace BotTest.Game.AI.Knowledge
         public const int DarkArmedDragon = 65192027;
         // Can't be destroyed by battle; dies when targeted; a direct hit makes us discard at random.
         public const int SpiritReaper = 23205979;
+        // Pays 1000 LP to negate and destroy a Spell/Trap that targets exactly 1 Psychic monster.
+        public const int ThoughtRulerArchfiend = 70780151;
         // Gains 300 ATK in the Damage Step when it attacks a monster (attack math counts it).
         public const int LightswornPaladinJain = 96235295;
         public const int BlackRoseDragon = 73580471;

@@ -591,7 +591,7 @@ namespace BotTest.Game.AI.Brains
             // Brain Control the most threatening monster (Stardust first), but only with a plan for it this turn.
             // Tytannial cornered (the only Plant of theirs) is a plan on its own: she tributes herself to negate it,
             // or we take the monster.
-            var priorityEnemy = GetPriorityEnemyMonster(board.EnemyMonsters.Where(card => card.IsFaceup()));
+            var priorityEnemy = GetPriorityEnemyMonster(board.EnemyMonsters.Where(card => card.IsFaceup() && !ThoughtRulerProtects(card, board.EnemyMonsters)));
             if (priorityEnemy.ID > 0 &&
                 ThreatScore(priorityEnemy) >= 1500 &&
                 CurrentField.OwnSide.LifePoints > 1600 &&
@@ -717,6 +717,12 @@ namespace BotTest.Game.AI.Brains
         {
             "Sangan", "Pyramid Turtle", "Apprentice Magician", "XX-Saber Emmersblade", "Goblin Zombie", "Dandylion", "Card Trooper"
         };
+
+        // Javier (2026-11-01): with a face-up Thought Ruler Archfiend of theirs, a Spell/Trap of ours doesn't target their
+        // Psychics (Thought Ruler included): they pay 1000 to negate and destroy it. Unless they can't pay (1000 LP or less).
+        protected bool ThoughtRulerProtects(DynamicCard target, IEnumerable<DynamicCard> enemyMonsters) =>
+            target.IsFaceup() && target.HasRace(CardRace.Psychic) && CurrentField.EnemySide.LifePoints > 1000 &&
+            enemyMonsters.Any(card => card.IsFaceup() && card.IsCode(ThoughtRulerArchfiend) && !card.IsDisabled());
 
         protected static bool FloatsOnDeath(int id) => CardIdentity.NameOf(id) is { } name && FloatsOnDeathNames.Contains(name);
 
@@ -1777,6 +1783,14 @@ namespace BotTest.Game.AI.Brains
                 return true;
             }
 
+            // Thought Ruler negates a Spell/Trap aimed at a Psychic attacker (Prison, Book of Moon).
+            if (card.IsCode(DimensionalPrison, BookOfMoon) && attacker.HasValue && ThoughtRulerProtects(attacker.Value, enemyMonsters) &&
+                !(attacker.Value.Attack >= lifePoints && !CurrentField.OwnSide.HasBattlingMonster))
+            {
+                Log($"Not chaining {card.ID}: Thought Ruler would pay 1000 to negate it on {attacker.Value.ID}");
+                return false;
+            }
+
             bool use = card.ID switch
             {
                 DimensionalPrison => ShouldUsePrison(attacker, enemyMonsters, lifePoints) && !StrongerAttackerWaiting(attacker, enemyMonsters, lifePoints),
@@ -2285,6 +2299,8 @@ namespace BotTest.Game.AI.Brains
 
             var priorityTargets = _priorityTargets;
             _priorityTargets = new();
+            // Our Spell/Trap: their Psychics under Thought Ruler go last (it would be negated).
+            bool spellTrapTargeting = !Chain.LastActivationWasMonsterEffect;
 
             var picks = selectable
                 .Select((card, index) => new { Card = card, Index = index })
@@ -2294,8 +2310,10 @@ namespace BotTest.Game.AI.Brains
                 // A face-up normal/quick-play spell or normal trap is just resolving: destroying it does nothing.
                 .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
                 .Where(x => !avoidPunishers || !x.Card.IsCode(PunishesMonsterTargeting))
+                .OrderBy(x => spellTrapTargeting && x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                    ThoughtRulerProtects(x.Card, enemyMonsterCards))
                 // Monsters marked when deciding to chain (the synchro pair Icarus breaks up) go first.
-                .OrderByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
                     priorityTargets.Any(p => p.CurrentCoordinates.Sequence == x.Card.CurrentCoordinates.Sequence))
                 // Tokens last: Dark Armed Dragon took two Fluff Tokens and left the set backrow (2026-10-21).
                 .ThenBy(x => (x.Card.Type & TokenType) != 0)
