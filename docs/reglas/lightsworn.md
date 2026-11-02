@@ -186,6 +186,7 @@ Código: `AvariceKeepsNames`, `AvaricePicks`
 ### Solar Recharge
 
 **Se usa si hay un Lightsworn para descartar que no sea Lumina ni Jain** y el mill no deja el deck en el piso. Lumina nunca se descarta y Jain se puede guardar.
+- **Con Druid (Aurkus) boca arriba de tu lado:** Lumina no puede revivir, así que sí se descarta para ver qué robás (antes que Jain).
 - Qué descarta: Wulf, después un Lightsworn repetido en la mano que todavía no esté en el cementerio, después uno que falte en el cementerio, después uno repetido. Jain y Lumina al final.
 
 Código: `SolarDiscardOrder`
@@ -236,7 +237,7 @@ Código: `FoolishPlan`, `FoolishOrder`, `JudgmentCanLand`
 
 ### Plaguespreader
 
-**Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish o si ya está en el cementerio:
+**Synchro con Plaguespreader (nivel 2) y uno de tus monstruos boca arriba**, desde Foolish, si ya está en el cementerio, **o invocándolo normal desde la mano** (con lo que sobrevivió en tu campo; así no paga la carta arriba del deck y va antes que setear a Ryko):
 - Solo si el rival no tiene una carta seteada que pueda ser Bottomless o Torrential, y sin Royal Oppression.
 - **Nunca si el rival no tiene monstruos (los tokens no cuentan)** (ni este synchro ni ningún otro): no hay nada que romper. Goyo contra un token solo y con backrow seteada fue un desperdicio. Se ataca y Lyla usa su efecto en la Main 2. Gastó Foolish, Plaguespreader, Lyla y Gardna en un turno 2 contra una sola carta seteada. Excepción: deck en 15 o menos, para sacar a Jain.
 - El synchro tiene que rendir ya: la regla genérica de synchros le da su bonus (Goyo roba, Catastor rompe un no-DARK, Magical Android cura con poca vida...) o da lethal.

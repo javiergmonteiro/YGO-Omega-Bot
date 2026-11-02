@@ -646,7 +646,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Solar Recharge: draw 2, mill 2. Needs a Lightsworn to discard that isn't Lumina or Jain (Javier: Lumina is
             // never discarded, Jain can be a hold).
-            if (CanMill(4, board) && MillKeepsCaution(2, board) && hand.Any(card => card.IsCode(LightswornMonsters) && !card.IsCode(Lumina, Jain)) &&
+            // Javier (2026-11-02): with our Druid up Lumina can't revive, so it goes to see what we draw.
+            bool luminaBlocked = DruidUp(board) && InHand(hand, Lumina);
+            if (CanMill(4, board) && MillKeepsCaution(2, board) &&
+                (luminaBlocked || hand.Any(card => card.IsCode(LightswornMonsters) && !card.IsCode(Lumina, Jain))) &&
                 TryActivate(state, SolarRecharge, false, out var solar))
             {
                 _pendingEffect = SolarRecharge;
@@ -880,6 +883,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Our attackers first: a set card could be Icarus and break the set Ryko plus an attacker (Javier).
             bool attackFirst = board.IsMain1 && board.EnemySpells.Any(card => !card.IsFaceup()) &&
                 ownMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked);
+
+            // Javier (2026-11-02): Plaguespreader normal summoned for a synchro with what survived on our field.
+            if (InHand(hand, Plaguespreader) && PlaguespreaderPlan(board, fromHand: true) &&
+                TryGetSummonable(state, Plaguespreader, out var plagueSummon))
+            {
+                Log("Normal summon: Plaguespreader for a synchro with our monster on the field");
+                return plagueSummon.NormalSummon();
+            }
 
             // Ryko face-down first, with a Threatening Roar to hold the attacks (turn 1 ideal).
             // Not into a Stardust: when its attack flips Ryko, the game forces the target and Stardust negates it (Javier).
@@ -1428,7 +1439,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     if (sent != null)
                         return sent;
                 }
-                var order = _pendingEffect == SolarRecharge ? SolarDiscardOrder(hand) : DiscardOrder(hand, board);
+                var order = _pendingEffect == SolarRecharge ? SolarDiscardOrder(hand, DruidUp(board)) : DiscardOrder(hand, board);
                 var discard = PickInOrder(state, order);
                 if (discard != null)
                 {
@@ -1596,7 +1607,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         // Solar Recharge: Wulf first, then the Lightsworn repeated in hand (one whose name isn't in the GY yet adds a name),
         // then the ones missing from the GY. Jain and Lumina last (Javier: Jain can be a hold, Lumina is never discarded).
-        private int[] SolarDiscardOrder(List<DynamicCard> hand)
+        private bool DruidUp(Board board) => board.OwnMonsters.Any(card => card.IsCode(Druid) && card.IsFaceup() && !card.IsDisabled());
+
+        private int[] SolarDiscardOrder(List<DynamicCard> hand, bool luminaBlocked)
         {
             var inHand = LightswornMonsters.Where(id => id != Wulf && id != Lumina && id != Jain && InHand(hand, id)).ToList();
             int CopiesInHand(int id) => hand.Count(card => card.IsCode(id));
@@ -1605,7 +1618,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 .Concat(inHand.Where(id => GraveCopies(id) == 0))
                 .Concat(inHand.Where(id => CopiesInHand(id) >= 2))
                 .Concat(inHand.OrderByDescending(GraveCopies))
-                .Concat(new[] { Jain, Lumina })
+                .Concat(luminaBlocked ? new[] { Lumina, Jain } : new[] { Jain, Lumina })
                 .ToArray();
         }
 
@@ -1757,7 +1770,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Plaguespreader + one of our face-up monsters into a synchro that pays off now: the situational synchro rule
         // likes it (Goyo steals, Catastor breaks a non-DARK, Brionac bounces, Android heals at low LP...) or it gives
         // lethal. Only when no set card of theirs may be Bottomless / Torrential (Javier).
-        private bool PlaguespreaderPlan(Board board)
+        // fromHand: a normal summoned Plaguespreader, so no card from hand goes on top of the deck.
+        private bool PlaguespreaderPlan(Board board, bool fromHand = false)
         {
             // Javier: with the deck running low, a Lightsworn that mills every End Phase (Jain) goes into any synchro to
             // get it off the field, Bottomless or not, and any card can go on top of the deck (the bot sat idle and
@@ -1766,7 +1780,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 Synchros.Any(x => x.Value.Level == card.Level + 2));
             if (!IsBotTurn || (SummonTrapPossible(board) && !millerOut) || OppressionStopsOurSpecialSummons(board))
                 return false;
-            if (millerOut && board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader, JudgmentDragon)))
+            if (millerOut && (fromHand || board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader, JudgmentDragon))))
             {
                 LogOnChange($"Plaguespreader: synchro to take an End Phase miller off the field ({DeckCount} cards left)");
                 return true;
@@ -1778,12 +1792,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // (Stardust), any card but Judgment Dragon (Javier).
             bool goyoSteal = ScoreSynchro(GoyoGuardian, board) > 30 &&
                 board.OwnMonsters.Any(card => card.IsFaceup() && card.Level == 4 && !card.HasType((CardType)CardKnowledge.TunerType));
-            if (goyoSteal && board.Hand.Any(card => !card.IsCode(JudgmentDragon, Plaguespreader)))
+            if (goyoSteal && (fromHand || board.Hand.Any(card => !card.IsCode(JudgmentDragon, Plaguespreader))))
             {
                 LogOnChange("Plaguespreader: Goyo steals their monster, any card but Judgment Dragon goes on top");
                 return true;
             }
-            if (!board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
+            if (!fromHand && !board.Hand.Any(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)))
                 return false;
 
             // Against Tytannial (Javier): a level 3 (Card Trooper, Lumina) makes Catastor, a level 4 a Goyo that trades.
@@ -1809,7 +1823,7 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                         continue;
                     // Brionac costs another discard: a value play only with two cheap cards (one for the top of the
                     // deck, one for its bounce), else only for lethal (below).
-                    bool brionacPaid = board.Hand.Count(card => !card.IsCode(FoolishBurial) && Expendable(card)) >= 2;
+                    bool brionacPaid = board.Hand.Count(card => !card.IsCode(FoolishBurial, Plaguespreader) && Expendable(card)) >= (fromHand ? 1 : 2);
                     if (ScoreSynchro(synchro, board) > 30 && (synchro != BrionacDragonOfTheIceBarrier || brionacPaid))
                         return true;
                     if (lethal)
