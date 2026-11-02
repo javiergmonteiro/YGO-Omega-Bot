@@ -256,12 +256,15 @@ Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 **Espera si la molienda del End Phase (lo que ya está más lo que revive) deja el deck por debajo de 15** (en un turno se fueron 12 cartas).
 
+**Lo mismo en la ventana que abre el juego justo después de invocarla:** antes se activaba ahí aunque la Main Phase dijera que espere (con 13 cartas en el deck revivió a Ryko).
+
 **Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip). Si hay objetivo, descarta lo que haga falta, menos Judgment Dragon (algo que usarías enseguida). Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
+- Si el juego no ofrece ninguno de la lista, revive el de más ATK que no sea Ryko.
 - Qué descarta: Wulf, Plaguespreader (solo si tiene plan: synchro ese turno o Goyo el siguiente), Necro Gardna, después un Lightsworn que falte en el cementerio o que esté repetido en la mano, después lo que menos valga en la mano.
 
-Código: `LuminaTarget`, `DiscardOrder`
+Código: `LuminaWaits`, `LuminaTarget`, `DiscardOrder`
 
 ### Ryko, Celestia y Lyla
 
@@ -317,7 +320,7 @@ Código: `DecideOwnEffectAsync`
 ### Honest
 
 **En el damage step:**
-- **Atacando, solo si da lethal o contra Stardust o Dark Armed Dragon.** La prioridad es defensiva: Honest se guarda para el turno rival. El bot ya no ataca contando con Honest salvo contra Stardust o DAD (gastó un Honest con Lyla contra Neos Alius; contra DAD, "la prioridad es deshacerse del Dark Armed").
+- **Atacando, solo si da lethal o contra Stardust o Dark Armed Dragon.** La prioridad es defensiva: Honest se guarda para el turno rival. El bot ya no ataca contando con Honest salvo contra Stardust o DAD (gastó un Honest con Lyla contra Neos Alius; contra DAD, "la prioridad es deshacerse del Dark Armed"). **El pump de Honest es el ATK del rival**, así que un LIGHT chico (Ryko 200) va contra el Stardust y no contra otro monstruo: Ryko atacó a una Pyramid Turtle "contando con Honest", Honest no salió y Ryko murió.
 - **Con un DAD boca arriba no se setea como muro:** queda en la mano para matarlo con un LIGHT (seteado, Dark End lo mandó al cementerio y DAD pegó).
 - Defendiendo: si atacan a tu LIGHT en ataque con un monstruo de igual o más ATK.
 - No contra una Machina Fortress con Gearframe equipado (se destruye el Gearframe y no se gana nada).
@@ -335,15 +338,15 @@ Código: `DecideOwnEffectAsync`
 
 **Corregido (2026-10-24):** Honest no salía nunca. Un bug hacía que el bot viera su propio monstruo como el del rival en las ventanas de batalla.
 
-Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
+Código: `ShouldUseHonest`, `PumpWinsBattle`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
-**Nunca sin monstruos tuyos que defender**, salvo que sus ataques te maten (se gastó con el campo vacío).
+**Nunca sin monstruos tuyos que defender**, salvo que sus ataques te maten (se gastó con el campo vacío). Solo cuentan los monstruos del rival que todavía no atacaron.
 
 **Solo dos momentos:**
-- **Cuando el rival entra en batalla** (o declara un ataque) con un monstruo en ataque.
-- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon, o un monstruo suyo que rompe backrow: Lyla robada, Celestia, Judgment Dragon, Breaker, Sorceress), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse. **MST o Icarus apuntando a otra carta no cuentan** (se encadenó a un MST que iba a Trap Dustshoot).
+- **Cuando el rival entra en batalla** con un monstruo en ataque, **antes de que declare ataques**. Con el ataque ya declarado no lo frena: se activó después de dos golpes directos y no sirvió.
+- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon, o un monstruo suyo que rompe backrow: Lyla robada, Celestia, Judgment Dragon, Breaker, Sorceress), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse. **MST o Icarus apuntando a otra carta no cuentan** (se encadenó a un MST que iba a Trap Dustshoot). **Corregido (2026-11-02):** no reconocía el MST que apuntaba a la propia Roar y la perdió con Gorz en campo.
 
 Una por turno (encadenó dos seguidas). Se setea una sola copia por vez, **antes que las otras trampas y aunque tengas Heavy Storm en la mano** (quedó en la mano y se seteó Dustshoot). Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
 

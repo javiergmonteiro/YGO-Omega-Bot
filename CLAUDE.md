@@ -49,5 +49,5 @@ Don't ask Javier to paste logs. If you do read raw logs, filter them, because th
 
 ## Git
 - Commit locally after each round of fixes.
-- Push only to the `github` remote (https://github.com/javiergmonteiro/YGO-Omega-Bot.git), and only when he says so.
+- Push only to the `github` remote (https://github.com/javiergmonteiro/YGO-Omega-Bot.git). At the end of a round, after committing, run the `/publicar` skill (a Sonnet agent): it pushes. Only with `/publicar release`, when Javier explicitly asks for a release, does it also build the zip and publish a GitHub release.
 - Never push to `origin`, the upstream GitLab repo.

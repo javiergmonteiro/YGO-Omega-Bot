@@ -60,6 +60,7 @@ Cada entrada tiene:
 | Dato | Significado |
 |---|---|
 | `CurrentCoordinates.Controller` en datos de selección | **0 = bot, 1 = rival** (relativo al bot) |
+| `CurrentChainTargets[].Controller` | **Relativo a quien activó la carta** (probable): el código original de Amazoness lo lee así, y un MST del rival sobre la Roar del bot no matcheaba con `Controller == 0` (2026-11-02). Comparar solo zona + sequence, o tratar `!= 0` como "carta del otro jugador". |
 | Header `LastChainPlayer` / `LastSummonPlayer` | 0 = bot, 1 = rival, -1 = desconocido |
 | Header `CurrentPlayer` | 0 = turno del bot |
 | Respuesta idle/battle | `ushort action, ushort index` |

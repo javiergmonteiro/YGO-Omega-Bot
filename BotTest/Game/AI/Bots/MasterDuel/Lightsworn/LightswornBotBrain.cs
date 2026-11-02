@@ -142,6 +142,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         // Dark Armed Dragon (2026-11-01: "la prioridad es deshacerse del Dark Armed Dragon").
         protected override bool CanBeBoosted(DynamicCard card) => (card.Attribute & LightAttribute) != 0 && (_stardustUp || _darkArmedUp);
 
+        // Honest adds the target's ATK, and on our turn it only fires into Stardust / Dark Armed Dragon: the pump attack
+        // goes at them, never at another monster (2026-11-02: Ryko hit Pyramid Turtle "counting on Honest", Honest stayed
+        // in hand and Ryko died, with Stardust on the field).
+        protected override bool PumpWinsBattle(DynamicCard attacker, DynamicCard target, int boost) =>
+            target.IsCode(StardustDragon, CardKnowledge.DarkArmedDragon) && attacker.Attack + target.Attack > target.GetRealPower();
+
         protected override int HandValue(DynamicCard card)
         {
             // Wulf only comes out from the deck: in hand it's a dead card. Plaguespreader and Gardna work from the GY.
@@ -783,42 +789,49 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         private IdleCmdResponse? DecideLumina(IdleCmdData state, Board board)
         {
-            if (!CanUseMonsterEffect(Lumina, board, board.EnemyMonsters))
+            if (!CanUseMonsterEffect(Lumina, board, board.EnemyMonsters) || LuminaWaits(board))
                 return null;
+            if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
+                return null;
+            _pendingEffect = Lumina;
+            return lumina;
+        }
+
+        // When Lumina holds its effect. Also checked in the window the engine opens right after its summon (2026-11-02:
+        // it fired there with 13 cards in the deck while the Main Phase said wait, and revived Ryko).
+        private bool LuminaWaits(Board board)
+        {
             // Against Tytannial, only to bring a level 3/4 for a Plaguespreader synchro (Catastor / Goyo).
             if (TytannialPlan(board) && board.OwnMonsters.Count > 1)
             {
                 LogOnChange("Lumina waits: Tytannial up, no more bodies on the field");
-                return null;
+                return true;
             }
             if (ReaperWall(board) && board.OwnMonsters.Count > 0)
             {
                 LogOnChange("Lumina waits: Spirit Reaper walls us, no more bodies");
-                return null;
+                return true;
             }
             // Javier (2026-11-01): Lumina filled the field before the Plaguespreader synchro, no synchro came and the
             // End Phase mills decked us. The synchro goes first; with 4 monsters out, no more bodies.
             if (board.OwnMonsters.Count >= 4)
             {
                 LogOnChange("Lumina waits: the field is nearly full");
-                return null;
+                return true;
             }
             if (GraveCopies(Plaguespreader) > 0 && board.Hand.Count > 1 && PlaguespreaderPlan(board))
             {
                 LogOnChange("Lumina waits: Plaguespreader's synchro comes first");
-                return null;
+                return true;
             }
             // What it revives mills too: not under 15 this End Phase (12 cards gone in one turn, 2026-11-02).
             int luminaMill = EndPhaseMill(board) + MillAmount(LuminaTarget(board.Graveyard, board));
             if (DeckCount - luminaMill < DeckCaution && !OurLethal(board))
             {
                 LogOnChange($"Lumina waits: the End Phase would mill {luminaMill} with {DeckCount} cards left");
-                return null;
+                return true;
             }
-            if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
-                return null;
-            _pendingEffect = Lumina;
-            return lumina;
+            return false;
         }
 
         // Lumina revives a level 4 or lower Lightsworn: Lyla against backrow, Jain, Wulf... never Ryko (it comes face-up,
@@ -1143,6 +1156,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         protected override async Task<bool?> ShouldChainDeckCardAsync(DynamicCard card)
         {
+            // Lumina offered right after its summon: same holds as in the Main Phase.
+            if (IsBotTurn && card.IsCode(Lumina))
+            {
+                var board = await BuildBoardAsync();
+                if (!CanUseMonsterEffect(Lumina, board, board.EnemyMonsters) || LuminaWaits(board))
+                    return false;
+                _pendingEffect = Lumina;
+                return true;
+            }
             var decision = await DecideOwnEffectAsync(card);
             return decision;
         }
@@ -1245,12 +1267,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 if (IsBotTurn || _roarTurn == CurrentHeader.CurrentTurn)
                     return false;
                 var phase = (DuelPhase)CurrentHeader.CurrentPhase;
-                bool battle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep;
+                // Only at the start of their Battle Phase: once an attack is declared Roar doesn't stop it (Javier,
+                // 2026-11-02: "siempre es antes de la battle phase, durante ya no sirve").
+                bool battle = phase is DuelPhase.BattleStart;
                 var enemyMonsters = await GetEnemyMonsterCardsAsync();
                 bool threat = enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsAttack() && monster.Attack > 0);
                 // Javier (2026-11-02): with no monsters of ours it defends nothing, unless their attacks kill us.
                 bool ownMonstersOut = (await GetBotMonsterCardsAsync()).Any();
-                bool lethalIncoming = enemyMonsters.Where(monster => monster.IsFaceup() && monster.IsAttack()).Sum(monster => monster.Attack) >=
+                bool lethalIncoming = enemyMonsters.Where(monster => monster.IsFaceup() && monster.IsAttack() && !monster.Attacked).Sum(monster => monster.Attack) >=
                     CurrentField.OwnSide.LifePoints;
                 bool worthIt = ownMonstersOut || lethalIncoming;
                 // Javier: only two moments. When it's about to be destroyed (Heavy Storm, MST, Icarus, Black Rose's wipe)
@@ -1259,10 +1283,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 var enemySpells = await GetEnemySpellCardsAsync();
                 bool theirChain = CurrentHeader.LastChainPlayer == ChainTracker.Opponent;
                 // MST / Icarus aimed at another card don't touch Roar (Javier, 2026-11-01: chained to an MST on Dustshoot).
-                // With no target info it counts as aimed at Roar.
+                // With no target info it counts as aimed at Roar. The target's Controller is relative to whoever activated
+                // the card (their MST on our Roar arrives as 1), so only zone + sequence are compared (2026-11-02: an MST
+                // on Roar went unanswered with Gorz on the field).
                 bool HitsRoar(DynamicCard spell) => spell.IsCode(CardKnowledge.HeavyStorm) ||
                     spell.CurrentChainTargets is not { Length: > 0 } targets ||
-                    targets.Any(target => target.Controller == ChainTracker.Bot && target.Location == card.CurrentCoordinates.Location &&
+                    targets.Any(target => target.Location == card.CurrentCoordinates.Location &&
                         target.Sequence == card.CurrentCoordinates.Sequence);
                 bool destroyed = theirChain && (enemySpells.Any(spell => spell.IsFaceup() &&
                     spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack) && HitsRoar(spell)) ||
@@ -1554,6 +1580,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 int target = LuminaTarget(selectable.ToList(), board);
                 if (target != 0)
                     return Picked("Lumina revives", PickInOrder(state, new[] { target }), selectable);
+                // Nothing from the list: the strongest that isn't Ryko (a face-up Ryko does nothing, 2026-11-02).
+                Log($"Lumina revive: no listed target among {string.Join(",", selectable.Select(card => card.ID))}");
+                var fallback = selectable.Select((card, index) => (card, index)).Where(pair => !pair.card.IsCode(Ryko))
+                    .OrderByDescending(pair => pair.card.Attack).Select(pair => (byte)pair.index).Take(1).ToList();
+                if (fallback.Count > 0)
+                    return fallback;
             }
 
             // Monster Reincarnation: Judgment Dragon back, else Lumina.

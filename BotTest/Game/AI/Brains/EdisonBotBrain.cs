@@ -1327,7 +1327,9 @@ namespace BotTest.Game.AI.Brains
             }
 
             // Monsters that destroy a non-DARK monster they battle go for the biggest non-DARK threat, whatever its ATK.
-            for (int index = 0; index < attackers.Length; index++)
+            // Not into a Stardust that can negate it: Stardust destroys Catastor instead (Javier, 2026-11-02).
+            bool stardustNegates = IsStardustBlocking(enemyMonsters, await GetOwnSpellCardsAsync(), await GetBotHandCardsAsync());
+            for (int index = 0; index < attackers.Length && !stardustNegates; index++)
             {
                 var destroyer = attackers[index];
                 if (!destroyer.IsCode(DestroysNonDarkInBattle) || destroyer.Attacked)
@@ -1499,7 +1501,7 @@ namespace BotTest.Game.AI.Brains
                 var attacker = attackers[ready[0]];
                 var pumped = enemyMonsters
                     .Where(card => card.IsFaceup() && !card.IsCode(PunishesBattleDestruction))
-                    .Where(card => card.GetRealPower() >= attacker.Attack && card.GetRealPower() < attacker.Attack + boost)
+                    .Where(card => card.GetRealPower() >= attacker.Attack && PumpWinsBattle(attacker, card, boost))
                     .OrderByDescending(ThreatScore)
                     .FirstOrDefault();
                 if (pumped.ID > 0)
@@ -2682,6 +2684,11 @@ namespace BotTest.Game.AI.Brains
 
         // Destruction is pointless into Stardust, unless Royal Oppression (set or active) or D.D. Crow
         // can punish its revival from the GY.
+        /// <summary>Whether the damage-step pump in hand makes <paramref name="attacker"/> win against <paramref name="target"/>.
+        /// Decks whose pump depends on the target (Honest) override it.</summary>
+        protected virtual bool PumpWinsBattle(DynamicCard attacker, DynamicCard target, int boost) =>
+            target.GetRealPower() < attacker.Attack + boost;
+
         protected bool IsStardustBlocking(IEnumerable<DynamicCard> enemyMonsters, IEnumerable<DynamicCard> ownSpells, IEnumerable<DynamicCard> hand)
         {
             if (!IsStardustActive(enemyMonsters))
@@ -2792,6 +2799,10 @@ namespace BotTest.Game.AI.Brains
             // Gorz punishes our attacks: worth even more while we have attackers on the field.
             if (card.IsCode(GorzTheEmissaryOfDarkness) && board.OwnMonsters.Any(own => own.IsFaceup() && own.IsAttack()))
                 score += 2000;
+            // But it needs their field empty: while they have more monsters than us it's a dead card, and a searcher
+            // (Gearframe) is worth more (Javier, 2026-11-02: "gorz baja puntos si yo tengo la ventaja").
+            if (card.IsCode(GorzTheEmissaryOfDarkness) && board.EnemyMonsters.Count > 0 && board.EnemyMonsters.Count > board.OwnMonsters.Count)
+                score -= 2000 + (ThreatBonus.TryGetValue(Key(card), out int gorzThreat) ? gorzThreat : 0);
 
             // Wulf only comes out when a Lightsworn mills it: in their hand it's a dead card, back in the deck it's live (Javier).
             if (card.IsCode(LightswornWulf))

@@ -124,12 +124,12 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
 4. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
 5. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
 6. **Ehren ataca antes que nadie a un monstruo boca abajo** (en Lightsworn el synchro espera a que lo haga). Después, **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress, ni un **Krebons** boca arriba mientras el rival tenga más de 800 LP: niega el ataque pagando 800; también deja de contar para sacar a Goyo). **No roba a los que al morir reclutan, buscan o roban** (Sangan, Pyramid Turtle, Apprentice Magician, XX-Saber Emmersblade, Goblin Zombie, Dandylion, Card Trooper): su efecto sale igual y nos queda un cuerpo débil. También dice que no al "¿robarlo?" que pregunta el juego después de la batalla (Goyo había atacado a una Pyramid Turtle seteada y se la quedó). Tampoco cuentan para que valga la pena sacar a Goyo. **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
-7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
+7. **Los que destruyen no-DARK** (Catastor) van a la mayor amenaza no-DARK. **No con un Stardust que lo pueda negar**: Stardust niega el efecto y destruye a Catastor.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:
     - **Un monstruo robado choca aunque empate** con un monstruo del rival en ataque, porque igual se devuelve en la End Phase. Solo si no tiene un ataque mejor que gane. Lo mismo para el cuerpo descartable de cada mazo (Wulf en Lightsworn), que además puede chocar con tokens.
     - **El mejor ataque que gana.** Entre objetivos que gana igual, va al más peligroso. Un monstruo importante no ataca a Machina Fortress, salvo que sea robado, que tengas más monstruos que el rival, o sea **Goyo con un uso para el Fortress** (un tuner nuestro para sincronizarlo, o un monstruo en mano para tributarlo; en Lightsworn, Celestia): Goyo se lo queda y el trade es a favor.
-    - **Si no gana solo pero sí con Kalut en la mano** (solo Blackwings): ataca igual al más peligroso que le gane con +1400 (nunca Fortress).
+    - **Si no gana solo pero sí con un pump en la mano** (Kalut en Blackwings, +1400; Honest en Lightsworn, ver su ficha): ataca igual al más peligroso que le gane con el pump (nunca Fortress).
     - **Si no gana pero uno de atrás sí:** rebota contra un monstruo en defensa con DEF hasta 500 mayor a su ATK (y solo si le quedan más de 1000 de vida después), para que el siguiente pase a ser el primero.
     - **Si hay uno boca abajo en defensa:** le pega con el más fuerte.
     - **Si no,** termina la batalla.
@@ -384,6 +384,7 @@ Código: `ShouldUseRoyalOppression`, `SpecialSummonUnderway`, `TrySynchroSummon`
 - Primero las manos trampa que castigan los ataques: Gorz (4000, y +2000 más si tenemos monstruos en ataque), Tragoedia (3500), Honest (3000), Kalut espejo (2500). Se llevó una Lyla en vez de Honest, y con Honest el rival tuvo lethal.
 - Después los que arrancan combos: Stratos (2700), Machina Force (2700), Lonefire Blossom (2600), Quickdraw Synchron, Judgment Dragon, Dark Armed Dragon (2500), Debris Dragon, Machina Gearframe (2000), Caius, Raiza, Thestalos (1800), Card Trooper, Plaguespreader Zombie, Shura, Gale (1500), Bora (1000), Plasma (1000, más 2500 si ya tienen 3 monstruos para tributar).
 - Más el bonus de amenaza, más ATK/10, más 300 si es de nivel 4 o menos (invocable ya).
+- **Gorz baja cuando el rival tiene más monstruos que nosotros:** necesita su campo vacío, así que es una carta muerta y un buscador (Gearframe) vale más. Se llevó Gorz, el rival jugó Gearframe y ganó.
 - Ajustes: Debris Dragon pierde todo su valor si su GY está vacío (carta muerta). Con el GY vacío, los que buscan del mazo (Gearframe, Stratos) suben 1500. Machina Force baja 1500 si no hay Machina Fortress en su GY. Lightsworn Wulf nunca, salvo que sea el único: en la mano es una carta muerta y de vuelta en el mazo se vuelve viva.
 
 **Lo que vemos de la mano se recuerda** para otras reglas (Gorz, Mirror Force, trampas de ataque, Heavy Storm), pero caduca cuando aparece una copia pública.
