@@ -274,6 +274,7 @@ Código: `LuminaWaits`, `LuminaTarget`, `DiscardOrder`
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
 - **Catastor y Colossal Fighter boca arriba van antes que la backrow** (Catastor mató a Honest; Ryko rompió un Return en vez de Colossal).
 - **Goyo boca arriba va antes que la backrow** (por ejemplo, cuando Goyo ataca a Ryko: si no, se lo roba).
+- **Ryko dado vuelta por un ataque, con vos o el rival por debajo de 3000 LP:** rompe al atacante antes que la backrow. Ryko sobrevive y el rival queda sin monstruo (a 1800 contra 350 rompió una Instant Fusion seteada y Caius mató a Ryko).
 - **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
 Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffectTargetsAsync`

@@ -1624,15 +1624,24 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 var killer = await AttackerThatKillsUsAsync();
                 bool IsKiller(DynamicCard card) => killer.HasValue && card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
                     card.CurrentCoordinates.Sequence == killer.Value.CurrentCoordinates.Sequence;
+                // Ryko flipped by their attack with either side under 3000 LP: the attacker goes first, Ryko survives the
+                // battle and their field opens up (Javier, 2026-11-02: at 1800 vs 350 it broke a set Instant Fusion and
+                // Caius killed Ryko).
+                var enemySide = CurrentField.EnemySide;
+                bool lowLife = CurrentField.OwnSide.LifePoints < 3000 || enemySide.LifePoints < 3000;
+                bool attackerFirst = _pendingEffect == Ryko && !IsBotTurn && lowLife && enemySide.HasBattlingMonster;
+                bool IsAttacker(DynamicCard card) => attackerFirst && card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone &&
+                    card.CurrentCoordinates.Sequence == enemySide.BattlingMonster.CurrentCoordinates.Sequence;
                 var avoided = await AvoidedMonsterEffectTargetsAsync(hint == DHint.DESTROY);
                 var picks = selectable
                     .Select((card, index) => new { Card = card, Index = index })
                     .Where(x => x.Card.CurrentCoordinates.Controller == ChainTracker.Opponent)
                     // Like Icarus: no Fortress that costs a discard, no Gearframe-protected monster. The attacker
                     // that would kill us is still fair game.
-                    .Where(x => !avoided(x.Card) || IsKiller(x.Card))
+                    .Where(x => !avoided(x.Card) || IsKiller(x.Card) || IsAttacker(x.Card))
                     .Where(x => x.Card.CurrentCoordinates.Location != (byte)CardLocation.SpellZone || !x.Card.IsFaceup() || IsLastingCard(x.Card))
                     .OrderByDescending(x => IsKiller(x.Card))
+                    .ThenByDescending(x => IsAttacker(x.Card))
                     // A Goyo takes whatever it destroys (Ryko flipped by its attack): it goes before their backrow (Javier, 2026-11-01).
                     .ThenByDescending(x => x.Card.IsFaceup() && x.Card.IsCode(CardKnowledge.StealsOnBattle))
                     // Into a face-up Tytannial: she negates any target anyway, so aim at her (if she lets it through, she dies).
@@ -1648,7 +1657,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 if (picks.Count >= Math.Max(state.Minimum, 1))
                 {
                     Log($"{_pendingEffect} destroys {string.Join(",", picks.Select(i => selectable[i].ID))} " +
-                        (killer.HasValue ? $"(the attacks left kill us: {killer.Value.ID} first)" : "(backrow first)"));
+                        (killer.HasValue ? $"(the attacks left kill us: {killer.Value.ID} first)" :
+                            attackerFirst ? "(low LP: the attacker first)" : "(backrow first)"));
                     _pendingEffect = 0;
                     return picks;
                 }
