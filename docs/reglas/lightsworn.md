@@ -81,8 +81,10 @@ Código: `GraveNames`
 ### Prioridad de invocación normal
 
 - Si Lyla puede romper una backrow, va antes que setear Ryko.
+- **Con Torrential visto en su mano (Dustshoot) y una carta seteada que puede ser:** no invoca nada hasta que la use o se rompa (perdió dos monstruos). Setear sí.
+- **Con un Lightsworn que ya muele en campo:** no invoca otro que muela si el End Phase deja el deck por debajo de 15, salvo que tenga un trabajo.
 - **Lumina no se invoca sin un objetivo para revivir** en el cementerio (salvo que haga falta un bloqueador).
-- **Ryko no se setea contra un Stardust activo** (salvo que haga falta un bloqueador): cuando su ataque lo da vuelta, el juego obliga a elegir objetivo y Stardust lo niega.
+- **Ryko no se setea contra un Brionac boca arriba** (se lo devolvió a la mano dos veces seguidas), **ni contra un Stardust activo si ya tenés un monstruo** (salvo que haga falta un bloqueador): cuando su ataque lo da vuelta, el juego obliga a elegir objetivo y Stardust lo niega.
 - **Contra un Spirit Reaper que no podés pasar, no se extiende:** si sus únicos monstruos son Spirit Reaper boca arriba en defensa y ya tenés un monstruo, no invoca más (ni Lumina revive). Ryko seteado sí. La mano se guarda para una jugada que lo saque: Brionac con Plaguespreader, Celestia, Judgment Dragon (2026-11-01: siguió bajando cartas y se quedó sin deck).
 - Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
 - Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
@@ -117,7 +119,7 @@ Código: `DecideNormalSummon`
 ### Judgment Dragon
 
 **Se invoca con los 4 nombres y un motivo:**
-- da lethal ese turno;
+- da lethal ese turno; **con el rival en 3000 o menos, limpia con su efecto y ataca por 3000 aunque el deck esté corto** (tenía lethal y esperó por la molienda);
 - su efecto limpia el campo del rival (el rival tiene más cartas que vos, sin contar Ryko ni Card Trooper; 2000 LP o más);
 - mid-game: nunca en tu primer turno, y solo si el rival no tiene ninguna carta seteada (una Dimensional Prison lo desterró atacando).
 - **Main 1 si gana o si limpia:** da lethal, o el efecto limpia el campo y después JD ataca. **También en Main 1 si su backrow ya no está** (la rompió Heavy Storm o Lyla) y JD le gana a alguno de sus monstruos: baja y ataca. Si no, espera a la Main 2, cuando la batalla ya mostró la backrow.
@@ -170,7 +172,7 @@ Código: `ShouldSummonGorzAsync`, `OnSelectPositionAsync`
 **Desde la mano, al recibir daño de batalla:** si tenés 5 cartas o más en la mano, o no tenés monstruos y estás en 3000 o menos. Siempre en defensa.
 
 **Su efecto (robo permanente):** manda a la mano un monstruo del mismo nivel que el mejor monstruo boca arriba del rival que se pueda robar (no tokens).
-- Manda el de menor valor. JD solo si ya tenés 4 nombres o más.
+- Manda el de menor valor. JD solo si ya tenés 4 nombres o más. **Honest nunca.**
 - ⚠ Tiene dos efectos (robar y cambiar de nivel). Si el motor ofrece primero el de nivel, puede usar ese primero.
 
 Código: `FindTragoediaSteal`
@@ -215,8 +217,8 @@ Código: `DecideSpells`
 
 No está en la lista actual (va Monster Reincarnation), pero la regla queda por si vuelve:
 
-**Se usa cuando al menos la mitad del resto de la mano son cartas que rinden más en el cementerio** (Wulf, Plaguespreader, Necro Gardna), con 2 cartas o más para descartar.
-- **También con 2000 LP o menos y sin respuesta:** ni Roar ni Mirror Force en mano y nada seteado. Va a buscar una (se la guardó con lethal encima).
+**Se usa cuando al menos la mitad del resto de la mano son cartas que rinden más en el cementerio** (Wulf, Plaguespreader, Necro Gardna), con 2 cartas o más para descartar, **y nunca con Judgment Dragon en la mano** (lo descartó).
+- **También con 2000 LP o menos y sin respuesta:** ni Roar ni Mirror Force en mano y nada seteado. Va a buscar una (se la guardó con lethal encima). **Con 3000 o menos si el turno anterior no jugó nada** (estuvo dos turnos en 2200 sin hacer nada).
 
 Código: `DecideSpells`
 
@@ -252,6 +254,8 @@ Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 **Espera si ya tenés 4 monstruos o si Plaguespreader puede volver del cementerio para un synchro ese turno:** el synchro va primero (2026-11-01: llenó el campo, no hubo synchro y las moliendas del End Phase lo dejaron sin deck).
 
+**Espera si la molienda del End Phase (lo que ya está más lo que revive) deja el deck por debajo de 15** (en un turno se fueron 12 cartas).
+
 **Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip). Si hay objetivo, descarta lo que haga falta, menos Judgment Dragon (algo que usarías enseguida). Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
@@ -265,6 +269,7 @@ Código: `LuminaTarget`, `DiscardOrder`
 - Celestia destruye 2 si puede. Puede tributar otra Celestia (con 2 en mano). Su efecto se saltea si moler 4 lo deja en el piso.
 - **Ryko contra Stardust o Tytannial con Plantas para tributar:** el bot no lo da vuelta. Si lo da vuelta el ataque del rival, intenta no destruir nada, pero el juego obliga a elegir un objetivo (confirmado 2026-10-30), así que destruye como siempre.
 - **Como Icarus (regla del Edison):** no apuntan a un Fortress salvo que valga el descarte, ni a un monstruo con Gearframe equipado (solo moriría el Gearframe: se apunta al Gearframe).
+- **Catastor y Colossal Fighter boca arriba van antes que la backrow** (Catastor mató a Honest; Ryko rompió un Return en vez de Colossal).
 - **Goyo boca arriba va antes que la backrow** (por ejemplo, cuando Goyo ataca a Ryko: si no, se lo roba).
 - **Si los ataques que le quedan al rival te matan y no tenés Gorz en mano** (sin contar el que está en batalla, descontando tus otros monstruos como bloqueadores): rompe al atacante más fuerte en vez de la backrow, aunque sea un Fortress. Ryko rompió un Raigeki Break y dos Fortress pegaron 5000.
 
@@ -334,9 +339,11 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 ### Threatening Roar
 
+**Nunca sin monstruos tuyos que defender**, salvo que sus ataques te maten (se gastó con el campo vacío).
+
 **Solo dos momentos:**
 - **Cuando el rival entra en batalla** (o declara un ataque) con un monstruo en ataque.
-- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse. **MST o Icarus apuntando a otra carta no cuentan** (se encadenó a un MST que iba a Trap Dustshoot).
+- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon, o un monstruo suyo que rompe backrow: Lyla robada, Celestia, Judgment Dragon, Breaker, Sorceress), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse. **MST o Icarus apuntando a otra carta no cuentan** (se encadenó a un MST que iba a Trap Dustshoot).
 
 Una por turno (encadenó dos seguidas). Se setea una sola copia por vez, **antes que las otras trampas y aunque tengas Heavy Storm en la mano** (quedó en la mano y se seteó Dustshoot). Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
 
