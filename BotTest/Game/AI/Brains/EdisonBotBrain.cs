@@ -259,6 +259,9 @@ namespace BotTest.Game.AI.Brains
         /// <summary>Our monsters with an effect when they destroy a monster by battle (attack first, never into tokens).</summary>
         protected virtual int[] OnBattleDestroyAttackers => Array.Empty<int>();
 
+        // Monsters that get rid of a face-down monster they attack (Ehren): they go first, into a face-down one.
+        protected virtual int[] FaceDownAttackers => Array.Empty<int>();
+
         /// <summary>Monster effects that target our own cards (never hit Machina Fortress).</summary>
         protected virtual int[] EffectsTargetingOwnCards => Array.Empty<int>();
 
@@ -731,9 +734,25 @@ namespace BotTest.Game.AI.Brains
         protected static bool FloatsOnDeath(int id) => FloatsOnDeathIds.Any(known => CardIdentity.Same(id, known)) ||
             (CardIdentity.NameOf(id) is { } name && FloatsOnDeathNames.Contains(name));
 
-        // A direct hit from these makes us discard at random (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum).
-        protected static bool DiscardsOnDirectHit(DynamicCard card) => card.IsCode(SpiritReaper) ||
-            CardIdentity.NameOf(card.ID) is "Reaper on the Nightmare" or "X-Saber Airbellum";
+        // A direct hit from these costs us a card from hand (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum
+        // discard; X-Saber Urbellum puts one on top of the deck, only while we hold 4 or more).
+        protected static bool DiscardsOnDirectHit(DynamicCard card, int handCount)
+        {
+            if (handCount == 0)
+                return false;
+            if (card.IsCode(SpiritReaper) || CardIdentity.NameOf(card.ID) is "Reaper on the Nightmare" or "X-Saber Airbellum")
+                return true;
+            return handCount >= 4 && (CardIdentity.Same(card.ID, XSaberUrbellumId) || CardIdentity.NameOf(card.ID) == "X-Saber Urbellum");
+        }
+        private const int XSaberUrbellumId = 80108118;
+
+        // Krebons negates an attack on it for 800 LP: no use attacking it to steal it (Javier, 2026-11-01: Goyo made for
+        // it and both attacks were negated).
+        protected bool NegatesAttacksOnIt(DynamicCard card) => card.IsFaceup() && !card.IsDisabled() &&
+            CardIdentity.NameOf(card.ID) == "Krebons" && CurrentField.EnemySide.LifePoints > 800;
+
+        // Not worth stealing with Goyo: it floats when it dies, or it negates the attack.
+        protected bool BadStealTarget(DynamicCard card) => FloatsOnDeath(card.ID) || NegatesAttacksOnIt(card);
 
         protected bool ShouldAttackBeforeSynchro(IdleCmdData state, Board board, List<DynamicCard> synchroOptions)
         {
@@ -837,7 +856,7 @@ namespace BotTest.Game.AI.Brains
             {
                 case GoyoGuardian:
                     // 2800: destroys it in battle and takes it. Worth it when there's something to steal.
-                    var stealable = enemies.Where(card => card.GetRealPower() < 2800 && (card.Type & TokenType) == 0 && !FloatsOnDeath(card.ID)).ToList();
+                    var stealable = enemies.Where(card => card.GetRealPower() < 2800 && (card.Type & TokenType) == 0 && !BadStealTarget(card)).ToList();
                     if (canAttackThisTurn && stealable.Count > 0)
                         score += 60 + stealable.Max(ThreatScore) / 100;
                     // Javier: a 2800 Tytannial can't be stolen, but Goyo trades with her (her effect doesn't stop battle).
@@ -1009,6 +1028,9 @@ namespace BotTest.Game.AI.Brains
             SolemnJudgment, StarlightRoad, DimensionalPrison, MirrorForce, BottomlessTrapHole, RoyalOppression, TrapDustshoot, IcarusAttack
         };
 
+        // Traps that go down first and aren't held back by our Heavy Storm in hand (Threatening Roar for Lightsworn).
+        protected virtual int[] PriorityTraps => Array.Empty<int>();
+
         // Set traps, plus Book of Moon / MST so they can be used on the opponent's turn.
         private IdleCmdResponse? DecideSets(DecisionContext<IdleCmdData> context, Board board)
         {
@@ -1039,7 +1061,9 @@ namespace BotTest.Game.AI.Brains
             }
 
             // Our own Heavy Storm in hand: keep the backrow small so casting it next turn costs us little.
-            if (setCount >= 1 && !desperate && board.Hand.Any(card => card.IsCode(HeavyStorm)))
+            bool priorityTrap = setables.Any(card => card.HasType(CardType.Trap) && card.IsCode(PriorityTraps) &&
+                !board.OwnSpells.Any(set => !set.IsFaceup() && set.IsCode(card.ID)));
+            if (setCount >= 1 && !desperate && !priorityTrap && board.Hand.Any(card => card.IsCode(HeavyStorm)))
             {
                 LogOnChange("Holding our sets: we have Heavy Storm in hand");
                 return null;
@@ -1060,7 +1084,8 @@ namespace BotTest.Game.AI.Brains
             var trap = setables
                 .Where(card => card.HasType(CardType.Trap))
                 .Where(card => !card.IsCode(OneSetCopyAtATime) || !board.OwnSpells.Any(set => !set.IsFaceup() && set.IsCode(card.ID)))
-                .OrderBy(card => Array.FindIndex(TrapSetOrder, id => card.IsCode(id)) is int i && i >= 0 ? i : TrapSetOrder.Length)
+                .OrderByDescending(card => card.IsCode(PriorityTraps))
+                .ThenBy(card => Array.FindIndex(TrapSetOrder, id => card.IsCode(id)) is int i && i >= 0 ? i : TrapSetOrder.Length)
                 .FirstOrDefault();
             if (trap.ID > 0)
             {
@@ -1261,6 +1286,22 @@ namespace BotTest.Game.AI.Brains
                 }
             }
 
+            // Javier: Ehren always goes first into a face-down monster, before anything else attacks it.
+            for (int index = 0; index < attackers.Length; index++)
+            {
+                var flipper = attackers[index];
+                if (!flipper.IsCode(FaceDownAttackers) || flipper.Attacked)
+                    continue;
+                var faceDown = (await GetEnemyMonsterCardsAsync()).FirstOrDefault(card => !card.IsFaceup() &&
+                    card.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone);
+                if (faceDown.CurrentCoordinates.Location == (byte)CardLocation.MonsterZone)
+                {
+                    Log($"{flipper.ID} attacks their face-down monster first");
+                    _forcedAttackTarget = faceDown;
+                    return AttackWith(flipper);
+                }
+            }
+
             // Monsters that steal what they destroy (Goyo) go first, into the best monster worth taking.
             var enemyMonsters = await GetEnemyMonsterCardsAsync();
             bool honestKnown = HonestKnownInTheirHand;
@@ -1272,7 +1313,7 @@ namespace BotTest.Game.AI.Brains
 
                 var target = enemyMonsters
                     .Where(card => card.IsFaceup() && (card.Type & TokenType) == 0 && card.GetRealPower() < thief.Attack)
-                    .Where(card => !card.IsCode(PunishesBattleDestruction) && !FloatsOnDeath(card.ID))
+                    .Where(card => !card.IsCode(PunishesBattleDestruction) && !BadStealTarget(card))
                     // Javier: Goyo attacked a Celestia with Honest already revealed in their hand.
                     .Where(card => !(honestKnown && (card.Attribute & LightAttribute) != 0))
                     .OrderByDescending(ThreatScore)
@@ -1813,8 +1854,8 @@ namespace BotTest.Game.AI.Brains
                     // Drill Warrior halved to 1200 for a direct attack is still a 2400 synchro that keeps coming back (Javier).
                     (enemyMonsters.Count(m => m.IsAttack()) >= 2 || attacker.Value.Attack >= 1800 || attacker.Value.Attack >= lifePoints ||
                      CardIdentity.NameOf(attacker.Value.ID) == "Drill Warrior" ||
-                     (DiscardsOnDirectHit(attacker.Value) &&
-                      !CurrentField.OwnSide.HasBattlingMonster && hand.Count > 0)),
+                     (DiscardsOnDirectHit(attacker.Value, hand.Count) &&
+                      !CurrentField.OwnSide.HasBattlingMonster)),
                 SolemnJudgment => SolemnOnSummonThreat(enemyMonsters) ||
                     (lifePoints >= 4000 && IsWorthSolemn(enemyMonsters) && !HasCheaperMonsterAnswer(ownSpells, header: CurrentHeader)),
                 IcarusAttack => await ShouldUseIcarus(enemyMonsters, enemySpells),

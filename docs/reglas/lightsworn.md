@@ -82,6 +82,7 @@ Código: `GraveNames`
 
 - Si Lyla puede romper una backrow, va antes que setear Ryko.
 - **Lumina no se invoca sin un objetivo para revivir** en el cementerio (salvo que haga falta un bloqueador).
+- **Ryko no se setea contra un Stardust activo** (salvo que haga falta un bloqueador): cuando su ataque lo da vuelta, el juego obliga a elegir objetivo y Stardust lo niega.
 - **Contra un Spirit Reaper que no podés pasar, no se extiende:** si sus únicos monstruos son Spirit Reaper boca arriba en defensa y ya tenés un monstruo, no invoca más (ni Lumina revive). Ryko seteado sí. La mano se guarda para una jugada que lo saque: Brionac con Plaguespreader, Celestia, Judgment Dragon (2026-11-01: siguió bajando cartas y se quedó sin deck).
 - Yendo segundo: Card Trooper primero para limpiar (si el rival tiene monstruos y el deck tiene más de 15). Contra un campo vacío en tu primer turno, Druid ataca y muele en vez de Ryko.
 - Ryko no se setea contra un Dark End Dragon boca arriba, ni en Main 1 si tenés atacantes y el rival tiene cartas seteadas (puede ser Icarus): primero se ataca y Ryko va en Main 2. Lumina con algo para revivir y un descarte barato cuenta como "con trabajo" y se invoca en Main 1 aunque sea más débil.
@@ -248,6 +249,8 @@ Código: `PlaguespreaderPlan`, `SelectDeckCardAsync`
 
 ### Lumina
 
+**Espera si ya tenés 4 monstruos o si Plaguespreader puede volver del cementerio para un synchro ese turno:** el synchro va primero (2026-11-01: llenó el campo, no hubo synchro y las moliendas del End Phase lo dejaron sin deck).
+
 **Revive solo si hay un objetivo que no sea Ryko** (Ryko vuelve boca arriba y no activa su efecto flip). Si hay objetivo, descarta lo que haga falta, menos Judgment Dragon (algo que usarías enseguida). Con Plasma no se usa.
 - Qué revive: Lyla si el rival tiene backrow, Ehren si hay monstruos boca abajo, después Jain, Wulf, Garoth, Lyla, Ehren, Druid.
 - Con 4 nombres o menos, revive primero uno repetido en el cementerio.
@@ -276,7 +279,7 @@ Código: `SelectDeckCardAsync`, `AttackerThatKillsUsAsync`, `AvoidedMonsterEffec
 - **Ataques directos:** suma este ataque y los que les quedan. Si juntos te matan y negar este te salva, va. Pero si después viene uno más grande cuya negación también te salva, espera a ese. Un ataque que solo te mata también va. Se comió 1800 y 2400 y la usó en el tercero.
 - Si el juego reabre la ventana del mismo ataque después del daño (tus LP ya bajaron), no se usa: ya no hay nada que negar.
 - Nunca en la Draw Phase ni por un monstruo cualquiera (protegió un Ryko de 200 y un Card Trooper).
-- **Contra un ataque directo que te hace descartar** (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum): se usa si tenés cartas en la mano y los ataques que quedan no te matan igual. Si te matan, se guarda para el letal.
+- **Contra un ataque directo que te cuesta una carta de la mano** (Spirit Reaper, Reaper on the Nightmare, X-Saber Airbellum; X-Saber Urbellum si tenés 4 o más): se usa si tenés cartas en la mano y los ataques que quedan no te matan, o si negar este alcanza para sobrevivir al resto aunque venga uno más grande (2026-11-01: dejó pasar a Urbellum esperando uno mayor).
 - **En respuesta a su Book of Life que lo destierra:** se encadena, así niega su próximo ataque en vez de perderse.
 
 **Como cuerpo seteado:** si no hay otra invocación y no tenés un Ryko de verdad en la mano, se setea aunque no vayas perdiendo: pasa por un Ryko y, si muere, desde el cementerio niega un ataque igual.
@@ -332,9 +335,9 @@ Código: `ShouldUseHonest`, `DecideNormalSummon`, `KeepsAttackAsBluff`
 
 **Solo dos momentos:**
 - **Cuando el rival entra en batalla** (o declara un ataque) con un monstruo en ataque.
-- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse.
+- **Si la van a destruir** (Heavy Storm, MST, Icarus, el efecto de Black Rose Dragon), siempre, aunque no haya atacantes. Contra Black Rose no salió y se destruyó sin usarse. **MST o Icarus apuntando a otra carta no cuentan** (se encadenó a un MST que iba a Trap Dustshoot).
 
-Una por turno (encadenó dos seguidas). Se setea una sola copia por vez. Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
+Una por turno (encadenó dos seguidas). Se setea una sola copia por vez, **antes que las otras trampas y aunque tengas Heavy Storm en la mano** (quedó en la mano y se seteó Dustshoot). Ya no se encadena a cualquier jugada del rival en su Main 1: se activaba a la búsqueda de Gearframe.
 
 Código: `DecideOwnEffectAsync`
 

@@ -407,6 +407,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         // Wulf on the field is just a 2100 body: it trades on equal ATK (Javier: Wulf into the Gorz token, not JD's wipe).
         protected override int[] OneSetCopyAtATime => new[] { ThreateningRoar };
+        protected override int[] PriorityTraps => new[] { ThreateningRoar };
+        protected override int[] FaceDownAttackers => new[] { Ehren };
 
         protected override bool TradesOnTie(DynamicCard attacker, DynamicCard target) =>
             attacker.IsCode(Wulf) || (attacker.IsCode(GoyoGuardian) && target.IsCode(CardKnowledge.TytannialPrincessOfCamellias));
@@ -589,7 +591,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Lyla's effect in Main 2. With the deck low it still takes an End Phase miller off the field.
             // Tokens don't count (Goyo into a lone token with their backrow set, 2026-10-29).
             bool synchroWorthIt = RealEnemyMonsters(board) > 0 || DeckCount <= DeckCaution;
-            if (synchroWorthIt && TrySynchroSummon(state, board, out var synchro))
+            // Javier: Ehren attacks the face-down monster first instead of going into a synchro.
+            bool ehrenFirst = board.IsMain1 && state.CanBattlePhase && board.EnemyMonsters.Any(card => !card.IsFaceup()) &&
+                board.OwnMonsters.Any(card => card.IsCode(Ehren) && card.IsFaceup() && card.IsAttack() && !card.Attacked);
+            if (ehrenFirst)
+                LogOnChange("Synchro waits: Ehren attacks their face-down monster first");
+            if (synchroWorthIt && !ehrenFirst && TrySynchroSummon(state, board, out var synchro))
                 return synchro;
 
             // Plaguespreader back from the GY (a card from hand goes on top of the deck) for a synchro that pays off now.
@@ -746,6 +753,18 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 LogOnChange("Lumina waits: Spirit Reaper walls us, no more bodies");
                 return null;
             }
+            // Javier (2026-11-01): Lumina filled the field before the Plaguespreader synchro, no synchro came and the
+            // End Phase mills decked us. The synchro goes first; with 4 monsters out, no more bodies.
+            if (board.OwnMonsters.Count >= 4)
+            {
+                LogOnChange("Lumina waits: the field is nearly full");
+                return null;
+            }
+            if (GraveCopies(Plaguespreader) > 0 && board.Hand.Count > 1 && PlaguespreaderPlan(board))
+            {
+                LogOnChange("Lumina waits: Plaguespreader's synchro comes first");
+                return null;
+            }
             if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
                 return null;
             _pendingEffect = Lumina;
@@ -863,7 +882,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 ownMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked);
 
             // Ryko face-down first, with a Threatening Roar to hold the attacks (turn 1 ideal).
-            if (!darkEndUp && !attackFirst && !ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) &&
+            // Not into a Stardust: when its attack flips Ryko, the game forces the target and Stardust negates it (Javier).
+            if (!darkEndUp && !attackFirst && !(board.StardustBlocking && !needBlocker) &&
+                !ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) &&
                 TryGetMonsterSettable(state, Ryko, out var ryko))
             {
                 Log("Setting Ryko");
@@ -1152,8 +1173,14 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 // Main 1 plays.
                 var enemySpells = await GetEnemySpellCardsAsync();
                 bool theirChain = CurrentHeader.LastChainPlayer == ChainTracker.Opponent;
+                // MST / Icarus aimed at another card don't touch Roar (Javier, 2026-11-01: chained to an MST on Dustshoot).
+                // With no target info it counts as aimed at Roar.
+                bool HitsRoar(DynamicCard spell) => spell.IsCode(CardKnowledge.HeavyStorm) ||
+                    spell.CurrentChainTargets is not { Length: > 0 } targets ||
+                    targets.Any(target => target.Controller == ChainTracker.Bot && target.Location == card.CurrentCoordinates.Location &&
+                        target.Sequence == card.CurrentCoordinates.Sequence);
                 bool destroyed = theirChain && (enemySpells.Any(spell => spell.IsFaceup() &&
-                    spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack)) ||
+                    spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack) && HitsRoar(spell)) ||
                     enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsCode(CardKnowledge.BlackRoseDragon)));
                 bool use = destroyed || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
                 if (use)
@@ -1219,7 +1246,10 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool biggerSaves = waiting.Any(other => other > attack && total - other < ownSide.LifePoints);
                 // Javier: a direct hit that makes us discard (Spirit Reaper) is worth Gardna when we hold cards and the
                 // attacks still to come don't kill us anyway.
-                bool discardSaved = DiscardsOnDirectHit(enemySide.BattlingMonster) && (ownSide.Hand ?? Array.Empty<int>()).Length > 0 && !kills;
+                // If everything together kills us, it still goes on this one when negating it alone saves us (Javier,
+                // 2026-11-01: X-Saber Urbellum hit, then Gardna on the next).
+                bool discardSaved = DiscardsOnDirectHit(enemySide.BattlingMonster, (ownSide.Hand ?? Array.Empty<int>()).Length) &&
+                    (!kills || savesUs);
                 bool negate = attack >= ownSide.LifePoints || (kills && savesUs && !biggerSaves) || discardSaved;
                 Log($"Necro Gardna on a direct attack of {attack} ({total} incoming): {(discardSaved ? "yes, its hit makes us discard" : negate ? "yes, it would kill us" : kills && biggerSaves ? "no, a bigger one is coming" : "no, not lethal")}");
                 return negate;

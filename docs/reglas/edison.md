@@ -89,6 +89,7 @@ En cada decisión de la Main Phase, el bot recorre esta lista y hace la primera 
 
 **Topes por Heavy Storm** (todos se levantan con 2000 de vida o menos):
 - **Si vio Heavy Storm en la mano del rival:** como mucho 1 carta seteada, hasta que lo use.
+- **Trampas con prioridad del mazo** (Threatening Roar en Lightsworn): se setean primero y no las frena tener nuestro Heavy Storm en la mano.
 - **Si el Heavy Storm lo tiene el bot en la mano:** como mucho 1, para que usarlo el turno siguiente le cueste poco.
 - **Si no:** setea hasta la mayor de dos cantidades, 2 o las cartas que tenga seteadas el rival. Sin tope si tiene Solemn o Starlight Road seteado, porque protegen el campo.
 
@@ -122,7 +123,7 @@ Recordá: ataca solo el primero de la lista. En cada paso, el bot decide sobre e
    - Solo si no hay otros atacantes esperando detrás: si los hay, ataca igual, porque quedarse frena a todos.
 4. **Los que tienen efecto al destruir en batalla (Shura) atacan primero**, a un monstruo que no sea token y que le ganen (contando Kalut si está en la mano).
 5. **Book of Moon al declarar el ataque:** atacar a un bloqueador que no le gana boca arriba pero sí boca abajo, y darlo vuelta en la ventana de declaración.
-6. **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress). **No roba a los que al morir reclutan, buscan o roban** (Sangan, Pyramid Turtle, Apprentice Magician, XX-Saber Emmersblade, Goblin Zombie, Dandylion, Card Trooper): su efecto sale igual y nos queda un cuerpo débil. También dice que no al "¿robarlo?" que pregunta el juego después de la batalla (Goyo había atacado a una Pyramid Turtle seteada y se la quedó). Tampoco cuentan para que valga la pena sacar a Goyo. **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
+6. **Ehren ataca antes que nadie a un monstruo boca abajo** (en Lightsworn el synchro espera a que lo haga). Después, **Goyo** ataca primero a lo mejor que pueda robar (nunca Fortress, ni un **Krebons** boca arriba mientras el rival tenga más de 800 LP: niega el ataque pagando 800; también deja de contar para sacar a Goyo). **No roba a los que al morir reclutan, buscan o roban** (Sangan, Pyramid Turtle, Apprentice Magician, XX-Saber Emmersblade, Goblin Zombie, Dandylion, Card Trooper): su efecto sale igual y nos queda un cuerpo débil. También dice que no al "¿robarlo?" que pregunta el juego después de la batalla (Goyo había atacado a una Pyramid Turtle seteada y se la quedó). Tampoco cuentan para que valga la pena sacar a Goyo. **Con Honest visto en la mano del rival** (Dustshoot), no ataca a un monstruo LIGHT: atacó a Celestia con Honest revelado y murió.
 7. **Los que destruyen no-DARK** van a la mayor amenaza no-DARK.
 9. **Los que no se destruyen ni reciben daño** atacan a lo mejor del rival (nunca Fortress).
 10. **Elección general**, en este orden:
@@ -316,7 +317,7 @@ Código: `ShouldUsePrison`, `StrongerAttackerWaiting`, `DecideBattleCmdCoreAsync
 - Bloqueada con Stardust activo salvo lethal/Oppression/Crow. Un Mirror Force es de destrucción.
 - **Excepción: cuando el que ataca es la propia Stardust, se activa si el golpe duele** (lo que ataca este turno te deja en 4000 o menos). Si Stardust la niega, se tributa y su ataque se cae. Una Stardust sola contra 8000 LP no vale el Mirror Force: vuelve en la End Phase (2026-11-01).
 - **Contra Drill Warrior siempre**, aunque ataque con el ATK a la mitad (1200): es un synchro de 2400 que se destierra y vuelve.
-- **Contra un Spirit Reaper, Reaper on the Nightmare o X-Saber Airbellum que ataca directo, si tenés cartas en la mano:** su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
+- **Contra un Spirit Reaper, Reaper on the Nightmare o X-Saber Airbellum que ataca directo, si tenés cartas en la mano** (X-Saber Urbellum, si tenés 4 o más): su golpe te hace descartar, y Mirror Force lo destruye (no apunta).
 - No se encadena un segundo si ya respondimos la cadena.
 - **No contra un Card Trooper solo:** si el único monstruo del rival en ataque es Card Trooper (y no es letal), no se activa. Al destruirse le roba una carta, así que es un +1 para él.
 - **No contra un monstruo con una unión equipada** (Gearframe en Machina Fortress) si es su único monstruo en ataque: solo muere la unión y el ataque sigue.
