@@ -58,6 +58,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         private HashSet<string> _ownMonstersSeen = new();
         private int _trackTurn = -1;
         private int _roarTurn = -1;
+        // Last turn we played something in a Main Phase, and the one before it.
+        private int _lastPlayTurn = -1;
+        private int _previousPlayTurn = -1;
         private Func<DynamicCard, bool> _avoidedTarget = _ => false;
         private int _lylaSeenTurn = -1;
         private HashSet<int> _lylaFromLastTurn = new();
@@ -92,6 +95,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             _ownMonstersSeen = new();
             _trackTurn = -1;
             _roarTurn = -1;
+            _lastPlayTurn = -1;
+            _previousPlayTurn = -1;
             _lylaSeenTurn = -1;
             _lylaFromLastTurn = new();
             _gorzBaitTurn = -1;
@@ -343,11 +348,22 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
         // Judgment Dragon's wipe: when they have more cards than we do on the field (Javier: "hay que usarlo mas para
         // eliminar amenazas, principalmente la backrow", first the wipe, then the deploy).
+        // Javier (2026-11-02): Judgment Dragon wipes and attacks for 3000 into their 3000 or less: lethal, the deck
+        // doesn't matter.
+        private bool JudgmentLethal(Board board) =>
+            IsBotTurn && board.IsMain1 && CurrentField.EnemySide.LifePoints <= 3000 && CurrentField.OwnSide.LifePoints > 1000 &&
+            !board.StardustBlocking && !PlasmaNegates(board) && !board.OwnMonsters.Any(card => card.IsCode(JudgmentDragon) && card.Attacked);
+
         private bool JudgmentWipeWorthIt(Board board)
         {
             int lifePoints = CurrentField.OwnSide.LifePoints;
             if (lifePoints <= 1000 || board.StardustBlocking || PlasmaNegates(board))
                 return false;
+            if (JudgmentLethal(board) && board.EnemyMonsters.Count > 0 && board.OwnMonsters.Any(card => card.IsCode(JudgmentDragon) && card.IsFaceup()))
+            {
+                LogOnChange("Judgment Dragon wipes: its 3000 attack is lethal");
+                return true;
+            }
             // Javier (mirror, he won this way): a LIGHT attack with Honest already kills; the wipe would send their set
             // monster (a Necro Gardna?) to the GY, where it negates the attack. Only with no backrow the wipe should clear.
             if (HonestLethalWithoutWipe(board))
@@ -444,6 +460,24 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         };
 
         protected override async Task<IdleCmdResponse?> DecideMainPhaseAsync(DecisionContext<IdleCmdData> context, Board board)
+        {
+            var response = await DecideLightswornMainPhaseAsync(context, board);
+            if (response.HasValue && IsBotTurn && _lastPlayTurn != CurrentHeader.CurrentTurn)
+            {
+                _previousPlayTurn = _lastPlayTurn;
+                _lastPlayTurn = CurrentHeader.CurrentTurn;
+            }
+            return response;
+        }
+
+        // Our previous turn went by without a single play.
+        private bool IdleLastTurn()
+        {
+            int before = _lastPlayTurn == CurrentHeader.CurrentTurn ? _previousPlayTurn : _lastPlayTurn;
+            return CurrentHeader.CurrentTurn >= 3 && before < CurrentHeader.CurrentTurn - 2;
+        }
+
+        private async Task<IdleCmdResponse?> DecideLightswornMainPhaseAsync(DecisionContext<IdleCmdData> context, Board board)
         {
             _avoidedTarget = await AvoidedMonsterEffectTargetsAsync(destroying: true);
             _stardustUp = board.EnemyMonsters.Any(card => card.IsFaceup() && card.IsCode(StardustDragon));
@@ -557,9 +591,9 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     LogOnChange("Judgment Dragon waits: Dustshoot showed a Bottomless / Torrential and a set card may be it");
                 else if (OppressionStopsOurSpecialSummons(board))
                     LogOnChange("Judgment Dragon waits: Royal Oppression would negate it");
-                else if (!CanMill(4, board) && !lastResort)
+                else if (!CanMill(4, board) && !lastResort && !JudgmentLethal(board))
                     LogOnChange($"Judgment Dragon waits: its End Phase mill would leave {DeckCount - 4} cards");
-                else if (JudgmentReason(board) == null && !lastResort)
+                else if (JudgmentReason(board) == null && !lastResort && !JudgmentLethal(board))
                     LogOnChange("Judgment Dragon waits: no lethal, nothing to wipe, and not a mid-game turn into an empty backrow");
                 // Lyla first: she breaks their set card, then JD comes down (Javier, 2026-11-01: JD first ran into Bottomless).
                 else if (!lastResort && !OurLethal(board, 3000) && LylaCanBreak(board) && TryGetSummonable(state, Lyla, out _))
@@ -680,17 +714,19 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             // Card Destruction: when the hand is mostly cards that work better in the GY (Wulf, Plaguespreader, Gardna).
             var rest = hand.Where(card => !card.IsCode(CardDestruction)).ToList();
             if (rest.Count >= 2 && rest.Count(card => HandValue(card) == 0) * 2 >= rest.Count && CanMill(rest.Count, board) &&
-                !judgmentInGrave && TryActivate(state, CardDestruction, false, out var destruction))
+                !judgmentInGrave && !InHand(hand, JudgmentDragon) && TryActivate(state, CardDestruction, false, out var destruction))
             {
                 Log("Card Destruction: most of the hand works better in the GY");
                 return destruction;
             }
             // Javier: at 2000 LP or less with no answer (no Roar / Mirror Force in hand, nothing set), it digs for one.
             bool noAnswer = !hand.Any(card => card.IsCode(ThreateningRoar, MirrorForce)) && !board.OwnSpells.Any(card => !card.IsFaceup());
-            if (lifePoints <= 2000 && noAnswer && rest.Count >= 1 && CanMill(rest.Count, board) &&
+            // Javier (2026-11-02): at 3000 or less after a whole turn with no play, too (it sat at 2200 for two turns).
+            bool stuck = lifePoints <= 3000 && IdleLastTurn();
+            if ((lifePoints <= 2000 || stuck) && noAnswer && rest.Count >= 1 && CanMill(rest.Count, board) &&
                 TryActivate(state, CardDestruction, false, out var dig))
             {
-                Log("Card Destruction: low LP and no answer in hand, digging for one");
+                Log($"Card Destruction: {(stuck && lifePoints > 2000 ? "low LP and no play last turn" : "low LP and no answer in hand")}, digging for one");
                 return dig;
             }
 
@@ -769,6 +805,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 LogOnChange("Lumina waits: Plaguespreader's synchro comes first");
                 return null;
             }
+            // What it revives mills too: not under 15 this End Phase (12 cards gone in one turn, 2026-11-02).
+            int luminaMill = EndPhaseMill(board) + MillAmount(LuminaTarget(board.Graveyard, board));
+            if (DeckCount - luminaMill < DeckCaution && !OurLethal(board))
+            {
+                LogOnChange($"Lumina waits: the End Phase would mill {luminaMill} with {DeckCount} cards left");
+                return null;
+            }
             if (!TryActivate(state, Lumina, board.StardustBlocking, out var lumina))
                 return null;
             _pendingEffect = Lumina;
@@ -814,6 +857,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 var discard = board.Hand
                     .Where(card => card.HasType(CardType.Monster) && card.Level == target.Level)
                     .Where(card => !card.IsCode(JudgmentDragon) || GraveNames() >= 4)
+                    // Javier: Honest is never Tragoedia's cost.
+                    .Where(card => !card.IsCode(Honest))
                     .OrderBy(HandValue)
                     .FirstOrDefault();
                 if (discard.ID != 0)
@@ -885,8 +930,12 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             bool attackFirst = board.IsMain1 && board.EnemySpells.Any(card => !card.IsFaceup()) &&
                 ownMonsters.Any(card => card.IsFaceup() && card.IsAttack() && !card.Attacked);
 
+            // Javier (2026-11-02): Torrential seen in their hand and a set card that may be it: no summons until they
+            // use it or it's gone (it took two monsters). Setting is fine.
+            bool torrentialKnown = StillInRevealedHand(CardKnowledge.TorrentialTribute) && SummonTrapPossible(board) && !needBlocker;
+
             // Javier (2026-11-02): Plaguespreader normal summoned for a synchro with what survived on our field.
-            if (InHand(hand, Plaguespreader) && PlaguespreaderPlan(board, fromHand: true) &&
+            if (!torrentialKnown && InHand(hand, Plaguespreader) && PlaguespreaderPlan(board, fromHand: true) &&
                 TryGetSummonable(state, Plaguespreader, out var plagueSummon))
             {
                 Log("Normal summon: Plaguespreader for a synchro with our monster on the field");
@@ -895,12 +944,21 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
 
             // Ryko face-down first, with a Threatening Roar to hold the attacks (turn 1 ideal).
             // Not into a Stardust: when its attack flips Ryko, the game forces the target and Stardust negates it (Javier).
-            if (!darkEndUp && !attackFirst && !(board.StardustBlocking && !needBlocker) &&
+            // Not into a face-up Brionac either: it bounced the set Ryko back to hand twice in a row (Javier, 2026-11-02).
+            // With our field empty, Ryko still goes into a Stardust: an empty field is worse.
+            bool brionacUp = board.EnemyMonsters.Any(card => card.IsFaceup() && !card.IsDisabled() && card.IsCode(BrionacDragonOfTheIceBarrier));
+            if (!darkEndUp && !attackFirst && !brionacUp && !(board.StardustBlocking && !needBlocker && ownMonsters.Count > 0) &&
                 !ownMonsters.Any(card => card.IsCode(Ryko) && !card.IsFaceup()) &&
                 TryGetMonsterSettable(state, Ryko, out var ryko))
             {
                 Log("Setting Ryko");
                 return ryko.SetMonster();
+            }
+
+            if (torrentialKnown)
+            {
+                LogOnChange("No normal summon: Torrential seen in their hand and a set card may be it");
+                return null;
             }
 
             // Javier (2026-11-01): a Spirit Reaper we can't get past and we already have a monster: no more summons,
@@ -963,6 +1021,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 if (mills && DeckCount <= DeckFloor && !OurLethal(board, card.Attack) && !needBlocker)
                 {
                     LogOnChange($"Holding {cardId}: {DeckCount} cards left, its End Phase mill is too risky");
+                    continue;
+                }
+                // Javier (2026-11-02): one End Phase took 12 cards. With a miller already out, no new one that takes the
+                // deck under 15 this End Phase unless it has a job.
+                if (mills && millerOut && DeckCount - endMill < DeckCaution && !hasJob && !OurLethal(board, card.Attack) && !needBlocker)
+                {
+                    LogOnChange($"Holding {cardId}: the End Phase would mill {endMill} and leave the deck under {DeckCaution}");
                     continue;
                 }
                 if (mills && DeckCount <= DeckCaution && millerOut && !hasJob && !OurLethal(board, card.Attack) && !needBlocker)
@@ -1180,6 +1245,11 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                 bool battle = phase is DuelPhase.BattleStart or DuelPhase.BattleStep;
                 var enemyMonsters = await GetEnemyMonsterCardsAsync();
                 bool threat = enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsAttack() && monster.Attack > 0);
+                // Javier (2026-11-02): with no monsters of ours it defends nothing, unless their attacks kill us.
+                bool ownMonstersOut = (await GetBotMonsterCardsAsync()).Any();
+                bool lethalIncoming = enemyMonsters.Where(monster => monster.IsFaceup() && monster.IsAttack()).Sum(monster => monster.Attack) >=
+                    CurrentField.OwnSide.LifePoints;
+                bool worthIt = ownMonstersOut || lethalIncoming;
                 // Javier: only two moments. When it's about to be destroyed (Heavy Storm, MST, Icarus, Black Rose's wipe)
                 // it goes no matter what; otherwise when they enter the Battle Phase with an attacker up. Not on their
                 // Main 1 plays.
@@ -1193,8 +1263,13 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                         target.Sequence == card.CurrentCoordinates.Sequence);
                 bool destroyed = theirChain && (enemySpells.Any(spell => spell.IsFaceup() &&
                     spell.IsCode(CardKnowledge.HeavyStorm, CardKnowledge.MysticalSpaceTyphoon, CardKnowledge.IcarusAttack) && HitsRoar(spell)) ||
-                    enemyMonsters.Any(monster => monster.IsFaceup() && monster.IsCode(CardKnowledge.BlackRoseDragon)));
-                bool use = destroyed || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader));
+                    enemyMonsters.Any(monster => monster.IsFaceup() && (monster.IsCode(CardKnowledge.BlackRoseDragon) ||
+                        // Their monsters that break backrow (a stolen Lyla, 2026-11-02).
+                        monster.IsCode(Lyla, Celestia, JudgmentDragon) ||
+                        CardIdentity.NameOf(monster.ID) is "Breaker the Magical Warrior" or "Lightsworn Sorceress")));
+                bool use = worthIt && (destroyed || (battle && threat && !Chain.AnsweredCurrentChain(CurrentHeader)));
+                if (!worthIt && (destroyed || battle))
+                    LogOnChange("Threatening Roar waits: no monsters of ours to defend and their attacks don't kill us");
                 if (use)
                 {
                     _roarTurn = CurrentHeader.CurrentTurn;
@@ -1527,6 +1602,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
                     .ThenByDescending(x => x.Card.IsFaceup() && x.Card.IsCode(CardKnowledge.StealsOnBattle))
                     // Into a face-up Tytannial: she negates any target anyway, so aim at her (if she lets it through, she dies).
                     .ThenByDescending(x => x.Card.IsCode(CardKnowledge.TytannialPrincessOfCamellias) && x.Card.IsFaceup())
+                    // Javier (2026-11-02): Catastor (kills our Lightsworn in battle) and Colossal Fighter go before the backrow.
+                    .ThenByDescending(x => x.Card.IsFaceup() && CardIdentity.NameOf(x.Card.ID) is "Ally of Justice Catastor" or "Colossal Fighter")
                     .ThenByDescending(x => x.Card.CurrentCoordinates.Location == (byte)CardLocation.SpellZone && !x.Card.IsFaceup())
                     .ThenByDescending(x => (x.Card.Type & CardKnowledge.TokenType) == 0)
                     .ThenByDescending(x => RemovalValue(x.Card))
