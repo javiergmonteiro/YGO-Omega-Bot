@@ -513,12 +513,15 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
             }
 
             // Javier: a set Honest flips to get rid of a set monster or a token, then goes back to the hand in Main 2.
+            // Also when we have more monsters than them (2026-11-02): a set "Ryko" that never flips gives itself away, so
+            // it flips, attacks if it can and goes back to the hand. (Repositionable means it wasn't set this turn.)
             // Not when losing it as a blocker leaves them lethal next turn: then it stays set.
+            bool honestTarget = board.EnemyMonsters.Any(card => !card.IsFaceup() || ((card.Type & CardKnowledge.TokenType) != 0 && card.GetRealPower() < 1100));
+            bool outnumber = board.OwnMonsters.Count > board.EnemyMonsters.Count;
             if (IsBotTurn && board.IsMain1 && state.CanBattlePhase && TryGetReposable(state, Honest, out var setHonest) && !setHonest.IsFaceup() &&
-                board.EnemyMonsters.Any(card => !card.IsFaceup() || ((card.Type & CardKnowledge.TokenType) != 0 && card.GetRealPower() < 1100)) &&
-                !OpponentHasLethal(board, -1))
+                (honestTarget || outnumber) && !OpponentHasLethal(board, -1))
             {
-                Log("Flipping the set Honest: it hits their set monster / token and goes back to the hand in Main 2");
+                Log($"Flipping the set Honest: {(honestTarget ? "it hits their set monster / token" : "we outnumber them")}, back to the hand in Main 2");
                 return setHonest.Reposition();
             }
 
