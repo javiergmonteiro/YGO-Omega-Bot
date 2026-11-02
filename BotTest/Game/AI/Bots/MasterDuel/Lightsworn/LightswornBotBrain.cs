@@ -106,7 +106,8 @@ namespace BotTest.Game.AI.Bots.MasterDuel.Lightsworn
         };
 
         // Plaguespreader (level 2) is the only tuner.
-        protected override int[] SynchroLevels => new[] { 4, 6, 7, 8, 9 };
+        // Plaguespreader + a level 2/3/4/5/6/7: Armory Arm, Catastor / Magical Android, Goyo / Brionac, ... Mist Wurm.
+        protected override int[] SynchroLevels => new[] { 4, 5, 6, 7, 8, 9 };
 
         protected override int[] MonsterEffectCards { get; } = { Lyla, JudgmentDragon, Lumina, Tragoedia, CardTrooper, Honest };
 
